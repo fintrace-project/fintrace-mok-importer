@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: fintrace-mok-importer
+  servlet:
+    multipart:
+      # The default 1MB is below a multi-year dump.
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
