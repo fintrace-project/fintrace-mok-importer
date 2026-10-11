@@ -20,6 +20,26 @@ jobs:
         with:
           fetch-depth: 0   # the previous tag is needed to tell whether this component changed
 
+      # The stack deploys together, so the import contract this importer was built against must be
+      # the one the Core of this tag serves. Runs before the build-or-retag decision: an unchanged
+      # importer still fails here if Core's contract moved. Core's asset appears only once its own
+      # release job finishes, hence the long retry.
+      - name: Check the import contract against Core at this tag
+        run: |
+          pinned="$(sed -n 's/^coreApiVersion=//p' gradle.properties)"
+          fetch() {
+            curl --fail --silent --show-error --location --retry 30 --retry-delay 30 --retry-all-errors \
+              "https://github.com/fintrace-project/fintrace-core/releases/download/$1/openapi.json"
+          }
+          contract='{paths: (.paths | with_entries(select(.key | endswith("/import")))),
+                     schemas: (.components.schemas | with_entries(select(.key | startswith("Import"))))}'
+          fetch "v$pinned" | jq -S "$contract" > pinned.json
+          fetch "$GITHUB_REF_NAME" | jq -S "$contract" > released.json
+          if ! diff -u pinned.json released.json; then
+            echo "::error::Core $GITHUB_REF_NAME's import contract differs from coreApiVersion=$pinned — bump it in gradle.properties and rebuild"
+            exit 1
+          fi
+
       - name: Resolve version and image name
         id: meta
         run: |
