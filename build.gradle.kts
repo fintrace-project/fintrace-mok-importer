@@ -28,8 +28,11 @@ dependencies {
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("io.github.oshai:kotlin-logging-jvm:8.0.4")
 	implementation("tools.jackson.module:jackson-module-kotlin")
+	implementation("com.fasterxml.uuid:java-uuid-generator:5.1.0")
+
 	// Plain JDBC over the uploaded file: the dump is per-request input, not the service's datasource.
 	implementation("org.xerial:sqlite-jdbc:3.53.4.0")
+	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
