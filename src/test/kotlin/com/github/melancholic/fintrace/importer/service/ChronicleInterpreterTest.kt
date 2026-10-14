@@ -98,6 +98,103 @@ class ChronicleInterpreterTest {
 
             assertEquals(1L, snapshot.detail("update of an unknown operation ignored"))
         }
+
+        @Test
+        fun `a money verification sets the balance like an assignment`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").expense(1, 1, "10").verifyBalance(1, "40"))
+
+            assertEquals(money("40"), snapshot.finalBalance(1))
+        }
+
+        @Test
+        fun `a duplicate account creation keeps the first and is counted`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").account(1, "5"))
+
+            assertEquals(money("0"), snapshot.account(1).initialBalance)
+            assertEquals(1L, snapshot.detail("duplicate account creation ignored"))
+        }
+
+        @Test
+        fun `a duplicate operation creation keeps the first and is counted`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").expense(1, 1, "10").expense(1, 1, "20"))
+
+            assertEquals(money("10"), snapshot.operations.single().amount)
+            assertEquals(1L, snapshot.detail("duplicate operation creation ignored"))
+        }
+
+        @Test
+        fun `a deletion of an unknown operation is counted, not thrown`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").deleteOperation(99, moneyBack = true))
+
+            assertEquals(1L, snapshot.detail("deletion of an unknown operation ignored"))
+        }
+
+        @Test
+        fun `an operation naming a category that never existed has none, counted`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").expense(1, 1, "10", category = 99))
+
+            assertNull(snapshot.operations.single().categoryId)
+            assertEquals(1L, snapshot.detail("operation category no longer exists"))
+        }
+
+        @Test
+        fun `an event type the fold does not handle changes nothing`() {
+            val snapshot = interpretChronicle(Log().account(1, "5").version())
+
+            assertEquals(money("5"), snapshot.finalBalance(1))
+        }
+    }
+
+    @Nested
+    inner class CurrencyChanges {
+
+        @Test
+        fun `a currency change on an account without operations is taken silently`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").changeCurrency(1, 840))
+
+            assertEquals("USD", snapshot.account(1).currency)
+            assertNull(snapshot.detail("currency changed on an account with operations"))
+        }
+
+        @Test
+        fun `a currency change on an account with operations is taken and counted`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").expense(1, 1, "10").changeCurrency(1, 840))
+
+            assertEquals("USD", snapshot.account(1).currency)
+            assertEquals(1L, snapshot.detail("currency changed on an account with operations"))
+        }
+
+        @Test
+        fun `a change to the same currency is not counted`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").expense(1, 1, "10").changeCurrency(1, 978))
+
+            assertEquals("EUR", snapshot.account(1).currency)
+            assertNull(snapshot.detail("currency changed on an account with operations"))
+        }
+
+        @Test
+        fun `a currency change to an unknown code keeps the old one, counted`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").changeCurrency(1, 10001))
+
+            assertEquals("EUR", snapshot.account(1).currency)
+            assertEquals(1L, snapshot.detail("currency change to an unknown code ignored"))
+        }
+
+        @Test
+        fun `an update to an account skipped for its currency is ignored`() {
+            val snapshot = interpretChronicle(Log().account(1, "0", currency = 10001).assignBalance(1, "5"))
+
+            assertTrue(snapshot.accounts.isEmpty())
+            assertTrue(snapshot.anchors.isEmpty())
+        }
+
+        @Test
+        fun `deleting an account skipped for its currency frees its uid`() {
+            val snapshot = interpretChronicle(Log().account(1, "0", currency = 10001).deleteAccount(1).assignBalance(1, "5"))
+
+            assertTrue(snapshot.accounts.isEmpty())
+            assertEquals(1L, snapshot.detail("account update names an unknown account"))
+        }
     }
 
     @Nested
@@ -217,6 +314,51 @@ class ChronicleInterpreterTest {
             assertEquals(money("0"), snapshot.finalBalance(2))
             assertTrue(snapshot.transfers.isEmpty())
         }
+
+        @Test
+        fun `an update re-points both legs and moves the balances with them`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").account(2, "0").account(3, "100").account(4, "0")
+                    .transfer(1, 1, 2, "30")
+                    .repointTransfer(1, from = 3, to = 4)
+            )
+
+            val transfer = snapshot.transfers.single()
+            assertEquals(snapshot.account(3).id, transfer.source.accountId)
+            assertEquals(snapshot.account(4).id, transfer.target.accountId)
+            assertEquals(listOf(money("100"), money("0"), money("70"), money("30")), (1L..4L).map { snapshot.finalBalance(it) })
+        }
+
+        @Test
+        fun `re-pointing a leg away from a deleted account makes it move balances again`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").account(2, "0").account(3, "0")
+                    .transfer(1, 1, 2, "30")
+                    .deleteAccount(2)
+                    .repointTransfer(1, to = 3)
+                    .updateTransferMoney(1, "50")
+            )
+
+            assertEquals(snapshot.account(3).id, snapshot.transfers.single().target.accountId)
+            assertEquals(money("50"), snapshot.finalBalance(1))
+            assertEquals(money("50"), snapshot.finalBalance(3))
+        }
+
+        @Test
+        fun `a duplicate transfer creation keeps the first and is counted`() {
+            val snapshot = interpretChronicle(Log().account(1, "100").account(2, "0").transfer(1, 1, 2, "30").transfer(1, 1, 2, "60"))
+
+            assertEquals(money("30"), snapshot.transfers.single().source.amount)
+            assertEquals(1L, snapshot.detail("duplicate transfer creation ignored"))
+        }
+
+        @Test
+        fun `an update or deletion of an unknown transfer is counted, not thrown`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").updateTransferMoney(99, "5").deleteTransfer(98))
+
+            assertEquals(1L, snapshot.detail("update of an unknown transfer ignored"))
+            assertEquals(1L, snapshot.detail("deletion of an unknown transfer ignored"))
+        }
     }
 
     @Nested
@@ -274,6 +416,59 @@ class ChronicleInterpreterTest {
             val (filed, mismatched) = snapshot.operations
             assertEquals(snapshot.categories.single { it.uid == 7L }.id, filed.categoryId)
             assertNull(mismatched.categoryId)
+        }
+
+        @Test
+        fun `a group rename sets the group's final name`() {
+            val snapshot = interpretChronicle(Log().group(3, "Home", EXPENSE).renameGroup(3, "House"))
+
+            assertEquals("House", snapshot.categories.single().name)
+        }
+
+        @Test
+        fun `a group and a category share no uid space for renames`() {
+            val snapshot = interpretChronicle(Log().group(3, "Home", EXPENSE).category(3, "Rent", EXPENSE, group = 3).renameGroup(3, "House"))
+
+            assertEquals("House", snapshot.categories.single { it.isGroup }.name)
+            assertEquals("Rent", snapshot.categories.single { !it.isGroup }.name)
+        }
+
+        @Test
+        fun `edits of unknown categories are counted, not thrown`() {
+            val snapshot = interpretChronicle(Log().renameCategory(99, "x").renameGroup(98, "y").deleteCategory(97, moneyBack = false).move(96, to = 1))
+
+            assertEquals(2L, snapshot.detail("rename of an unknown category ignored"))
+            assertEquals(1L, snapshot.detail("deletion of an unknown category ignored"))
+            assertEquals(1L, snapshot.detail("move of an unknown category ignored"))
+        }
+
+        @Test
+        fun `a duplicate category creation keeps the first and is counted`() {
+            val snapshot = interpretChronicle(Log().category(7, "Rent", EXPENSE, group = 1).category(7, "Food", EXPENSE, group = 1))
+
+            assertEquals("Rent", snapshot.categories.single().name)
+            assertEquals(1L, snapshot.detail("duplicate category creation ignored"))
+        }
+
+        @Test
+        fun `a category under the other kind's root or group goes to its own root, counted`() {
+            val snapshot = interpretChronicle(
+                Log().group(3, "Home", EXPENSE)
+                    .category(7, "Salary", INCOME, group = 1)
+                    .category(8, "Bonus", INCOME, group = 3)
+            )
+
+            assertTrue(snapshot.categories.filter { !it.isGroup }.all { it.parentId == null })
+            assertEquals(1L, snapshot.detail("category under the other kind's root"))
+            assertEquals(1L, snapshot.detail("category under a group of the other kind"))
+        }
+
+        @Test
+        fun `a move cycle among groups is cut where it closes, counted`() {
+            val snapshot = interpretChronicle(Log().group(3, "Home", EXPENSE).group(4, "Car", EXPENSE).moveGroup(3, to = 4).moveGroup(4, to = 3))
+
+            assertEquals(1, snapshot.categories.count { it.parentId == null })
+            assertEquals(1L, snapshot.detail("category cycle cut"))
         }
     }
 
@@ -370,6 +565,14 @@ class ChronicleInterpreterTest {
         }
 
         @Test
+        fun `a zero-amount transfer is dropped and counted`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").account(2, "0").transfer(1, 1, 2, "0"))
+
+            assertTrue(snapshot.transfers.isEmpty())
+            assertEquals(1L, snapshot.detail("transfer without a positive amount dropped"))
+        }
+
+        @Test
         fun `a long comment is truncated to 255 and counted`() {
             val snapshot = interpretChronicle(Log().account(1, "0").expense(1, 1, "1", note = "x".repeat(300)))
 
@@ -408,7 +611,14 @@ class ChronicleInterpreterTest {
         fun assignBalance(uid: Long, money: String) =
             add { UpdatedAccount(it, uid, null, money(money), null, null) }
 
+        fun changeCurrency(uid: Long, currency: Int) =
+            add { UpdatedAccount(it, uid, null, null, currency, null) }
+
+        fun verifyBalance(uid: Long, money: String) = add { AccountMoneyVerification(it, null, uid, money(money)) }
+
         fun deleteAccount(uid: Long) = add { DeletedAccount(it, uid) }
+
+        fun version() = add { ChronicleVersion(it, 3) }
 
         fun income(uid: Long, account: Long, money: String, at: LocalDateTime = day(1), category: Long? = null) =
             add { AddNewTransaction(it, at, uid, INCOME, account, category, money(money), "") }
@@ -433,9 +643,16 @@ class ChronicleInterpreterTest {
         fun updateTransferNote(uid: Long, note: String) =
             add { UpdatedTransfer(it, null, uid, null, null, null, null, note) }
 
+        fun repointTransfer(uid: Long, from: Long? = null, to: Long? = null) =
+            add { UpdatedTransfer(it, null, uid, null, null, from, to, null) }
+
         fun deleteTransfer(uid: Long) = add { DeletedTransfer(it, null, uid) }
 
         fun group(uid: Long, name: String, kind: CategoryType) = add { AddedNewCategoriesGroup(it, uid, name, kind) }
+
+        fun renameGroup(uid: Long, name: String) = add { UpdatedCategoriesGroup(it, uid, name) }
+
+        fun moveGroup(uid: Long, to: Long) = add { MovedItem(it, uid, true, to) }
 
         fun deleteGroup(uid: Long) = add { DeletedCategoriesGroup(it, uid) }
 

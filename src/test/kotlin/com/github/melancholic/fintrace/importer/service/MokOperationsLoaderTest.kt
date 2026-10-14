@@ -79,6 +79,19 @@ class MokOperationsLoaderTest {
     }
 
     @Test
+    fun `a dump with no sequence table at all warns`() {
+        val file = dir.resolve("plain.sqlite")
+        java.sql.DriverManager.getConnection("jdbc:sqlite:$file").use {
+            it.createStatement().use { s ->
+                s.executeUpdate("CREATE TABLE Chronicle(uid INTEGER PRIMARY KEY, badge INTEGER, type INTEGER, params TEXT)")
+                s.executeUpdate("""INSERT INTO Chronicle (uid, badge, type, params) VALUES (4, 0, 20, '{"uid":1}')""")
+            }
+        }
+
+        assertEquals(RenumberingWarning(sequence = null, maxUid = 4), loader.load(file).renumbering)
+    }
+
+    @Test
     fun `an empty chronicle gives no rows and no warning`() {
         val dump = loader.load(fixture().write())
 
