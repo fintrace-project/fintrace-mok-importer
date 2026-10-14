@@ -7,6 +7,7 @@ plugins {
 	id("org.springframework.boot") version "4.1.1"
 	id("io.spring.dependency-management") version "1.1.7"
 	id("org.openapi.generator") version "7.14.0"
+	jacoco
 }
 
 group = "com.github.melancholic"
@@ -115,4 +116,25 @@ tasks.jar {
 
 springBoot {
 	buildInfo { excludes = setOf("time") }
+}
+
+jacoco {
+	toolVersion = "0.8.13"
+}
+
+tasks.test {
+	finalizedBy(tasks.jacocoTestReport)
+}
+
+tasks.jacocoTestReport {
+	dependsOn(tasks.test)
+	reports {
+		xml.required = true
+		html.required = true
+	}
+	classDirectories.setFrom(
+		files(classDirectories.files.map {
+			fileTree(it) { exclude("**/importer/contract/**") }
+		})
+	)
 }
