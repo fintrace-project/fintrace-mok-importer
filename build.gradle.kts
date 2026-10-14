@@ -10,7 +10,6 @@ plugins {
 }
 
 group = "com.github.melancholic"
-version = "0.0.1-SNAPSHOT"
 
 java {
 	toolchain {
