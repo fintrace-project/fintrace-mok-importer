@@ -9,7 +9,6 @@ import org.junit.jupiter.api.io.TempDir
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import java.nio.file.Path
-import java.sql.DriverManager
 import java.time.LocalDateTime
 import java.util.UUID
 import kotlin.test.assertEquals
@@ -33,8 +32,10 @@ class SyntheticDumpTest(
 
     @Test
     fun `the committed S dump imports with no diagnostics and the generator's balances`(@TempDir directory: Path) {
-        val file = directory.resolve("mok-synthetic-S-dump.sqlite")
-        build(file, resource(SyntheticDump.sqlFileName(SyntheticDumpSize.S)))
+        val file = SyntheticDump.buildSqlite(
+            resource(SyntheticDump.sqlFileName(SyntheticDumpSize.S)),
+            directory.resolve(SyntheticDump.mokFileName(SyntheticDumpSize.S)),
+        )
 
         val snapshot = interpreter.interpretChronicle(parser.parse(loader.load(file)), NOW, "EUR")
 
@@ -56,18 +57,6 @@ class SyntheticDumpTest(
 
     private fun ChronicleSnapshot.finalBalance(accountId: UUID) =
         anchors.filter { it.accountId == accountId }.maxBy { it.occurredAt }.value
-
-    private fun build(file: Path, sql: String) {
-        DriverManager.getConnection("jdbc:sqlite:$file").use { connection ->
-            connection.autoCommit = false
-            connection.createStatement().use { statement ->
-                sql.lineSequence()
-                    .filter { it.isNotBlank() && !it.startsWith("--") }
-                    .forEach { statement.executeUpdate(it) }
-            }
-            connection.commit()
-        }
-    }
 
     private fun resource(name: String): String =
         requireNotNull(javaClass.getResource("/synthetic/$name")) { "missing /synthetic/$name: $STALE" }.readText()

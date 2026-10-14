@@ -111,11 +111,14 @@ tasks.withType<Test> {
 }
 
 val generateSyntheticDumps by tasks.registering(JavaExec::class) {
-	description = "Regenerates the committed synthetic MOK dumps and their expected values."
+	description = "Regenerates the committed synthetic MOK dumps and their expected values; -Pmok also writes binary .mok dumps."
 	group = "verification"
 	classpath = sourceSets.test.get().output.classesDirs + sourceSets.main.get().output + configurations.testRuntimeClasspath.get()
 	mainClass = "com.github.melancholic.fintrace.importer.generator.GenerateSyntheticDumpsKt"
 	args(layout.projectDirectory.dir("src/test/resources/synthetic").asFile.path)
+	if (providers.gradleProperty("mok").isPresent) {
+		args(layout.buildDirectory.dir("synthetic").get().asFile.path)
+	}
 }
 
 tasks.processTestResources {

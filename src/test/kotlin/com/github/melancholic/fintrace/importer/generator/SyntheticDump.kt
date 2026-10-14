@@ -3,6 +3,9 @@ package com.github.melancholic.fintrace.importer.generator
 import tools.jackson.databind.SerializationFeature
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
+import java.nio.file.Files
+import java.nio.file.Path
+import java.sql.DriverManager
 import java.time.LocalDate
 
 enum class SyntheticDumpSize(val start: LocalDate, val end: LocalDate, val actionsPerDay: IntRange, val seed: Long) {
@@ -51,5 +54,21 @@ class SyntheticDump(val size: SyntheticDumpSize, val rows: List<ChronicleRow>, v
 
         fun sqlFileName(size: SyntheticDumpSize) = "mok-synthetic-${size.name}-dump.sql"
         fun expectedFileName(size: SyntheticDumpSize) = "mok-synthetic-${size.name}-dump.expected.json"
+        fun mokFileName(size: SyntheticDumpSize) = "mok-synthetic-${size.name}-dump.mok"
+
+        // A .mok export is the app's SQLite database file under another extension.
+        fun buildSqlite(sql: String, file: Path): Path {
+            Files.deleteIfExists(file)
+            DriverManager.getConnection("jdbc:sqlite:$file").use { connection ->
+                connection.autoCommit = false
+                connection.createStatement().use { statement ->
+                    sql.lineSequence()
+                        .filter { it.isNotBlank() && !it.startsWith("--") }
+                        .forEach { statement.executeUpdate(it) }
+                }
+                connection.commit()
+            }
+            return file
+        }
     }
 }
