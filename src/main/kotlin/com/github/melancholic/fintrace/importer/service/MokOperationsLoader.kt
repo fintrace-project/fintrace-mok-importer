@@ -3,12 +3,14 @@ package com.github.melancholic.fintrace.importer.service
 import com.github.melancholic.fintrace.importer.domain.ChronicleDump
 import com.github.melancholic.fintrace.importer.domain.RawMokOperation
 import com.github.melancholic.fintrace.importer.domain.RenumberingWarning
+import com.github.melancholic.fintrace.importer.exception.InvalidMokDumpException
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import org.sqlite.SQLiteConfig
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.SQLException
 
 
 interface MokOperationsLoader {
@@ -24,14 +26,18 @@ class MokOperationsLoaderImpl : MokOperationsLoader {
             setReadOnly(true)
         }
 
-        DriverManager.getConnection("jdbc:sqlite:$dump", config.toProperties())
-            .use { connection ->
-                val renumbering = checkRenumbering(connection)
-                if (renumbering != null) {
-                    log.warn { "Dump was rebuilt: sqlite_sequence.seq = ${renumbering.sequence}, max(uid) = ${renumbering.maxUid}" }
+        try {
+            DriverManager.getConnection("jdbc:sqlite:$dump", config.toProperties())
+                .use { connection ->
+                    val renumbering = checkRenumbering(connection)
+                    if (renumbering != null) {
+                        log.warn { "Dump was rebuilt: sqlite_sequence.seq = ${renumbering.sequence}, max(uid) = ${renumbering.maxUid}" }
+                    }
+                    return ChronicleDump(readOperations(connection), renumbering)
                 }
-                return ChronicleDump(readOperations(connection), renumbering)
-            }
+        } catch (e: SQLException) {
+            throw InvalidMokDumpException("Not a readable .mok dump: ${e.message}", e)
+        }
     }
 
     private fun readOperations(connection: Connection): List<RawMokOperation> {

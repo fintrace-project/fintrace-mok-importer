@@ -3,11 +3,11 @@ package com.github.melancholic.fintrace.importer.service
 import com.github.melancholic.fintrace.importer.ChronicleFixture
 import com.github.melancholic.fintrace.importer.domain.RawMokOperation
 import com.github.melancholic.fintrace.importer.domain.RenumberingWarning
+import com.github.melancholic.fintrace.importer.exception.InvalidMokDumpException
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Files
 import java.nio.file.Path
-import java.sql.SQLException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -106,14 +106,14 @@ class MokOperationsLoaderTest {
             it.createStatement().use { s -> s.executeUpdate("CREATE TABLE something (x INTEGER)") }
         }
 
-        assertFailsWith<SQLException> { loader.load(file) }
+        assertFailsWith<InvalidMokDumpException> { loader.load(file) }
     }
 
     @Test
     fun `a wrong path fails without creating a file`() {
         val missing = dir.resolve("missing.sqlite")
 
-        assertFailsWith<SQLException> { loader.load(missing) }
+        assertFailsWith<InvalidMokDumpException> { loader.load(missing) }
         assertFalse(Files.exists(missing))
     }
 }

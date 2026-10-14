@@ -6,6 +6,12 @@ spring:
       # The default 1MB is below a multi-year dump.
       max-file-size: 50MB
       max-request-size: 50MB
+  http:
+    serviceClient:
+      core:
+        base-url: ${FINTRACE_CORE_URL:http://fintrace-core:8080}
+        connect-timeout: 5s
+        read-timeout: 240s
 
 management:
   endpoints:

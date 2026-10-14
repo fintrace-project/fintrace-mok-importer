@@ -25,20 +25,19 @@ repositories {
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
+	implementation("org.springframework.boot:spring-boot-starter-restclient")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("io.github.oshai:kotlin-logging-jvm:8.0.4")
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	implementation("com.fasterxml.uuid:java-uuid-generator:5.1.0")
 
-	// Plain JDBC over the uploaded file: the dump is per-request input, not the service's datasource.
 	implementation("org.xerial:sqlite-jdbc:3.53.4.0")
 	testImplementation("org.springframework.boot:spring-boot-starter-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+	testImplementation("org.wiremock:wiremock-standalone:3.13.1")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-// The import contract's DTOs, generated from the spec Core attaches to its GitHub Release at
-// `coreApiVersion`. `-PcoreSpec=<path>` builds against an unreleased one, e.g. ../fintrace-core/openapi.json.
 val coreApiVersion: String by project
 val coreSpecOverride = providers.gradleProperty("coreSpec")
 val generatedContract = layout.buildDirectory.dir("generated/fintrace-core")
@@ -75,13 +74,12 @@ openApiGenerate {
 		"ImportEnvelopRequest", "ImportPayloadRequest", "ImportAccountRequest", "ImportCategoryRequest",
 		"ImportOperationRequest", "ImportTransferRequest", "ImportTransferLegRequest",
 		"ImportBalanceAnchorRequest", "ImportDiagnosticRequest", "ImportJobResponse",
-		"ImportDiagnosticDTO", "ImportProblemDTO",
+		"ImportDiagnosticDTO", "ImportProblemDTO", "WorkspaceResponse",
 	)
 	generateModelDocumentation = false
 	generateModelTests = false
 	configOptions = mapOf(
 		"serializationLibrary" to "jackson",
-		// Floating wall-clock, never zoned: the default OffsetDateTime would invent an offset.
 		"dateLibrary" to "java8-localdatetime",
 		"enumPropertyNaming" to "UPPERCASE",
 		"sourceFolder" to "src/main/kotlin",
