@@ -112,3 +112,7 @@ tasks.withType<Test> {
 tasks.jar {
 	enabled = false
 }
+
+springBoot {
+	buildInfo { excludes = setOf("time") }
+}
