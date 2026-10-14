@@ -110,6 +110,18 @@ tasks.withType<Test> {
 	useJUnitPlatform()
 }
 
+val generateSyntheticDumps by tasks.registering(JavaExec::class) {
+	description = "Regenerates the committed synthetic MOK dumps and their expected values."
+	group = "verification"
+	classpath = sourceSets.test.get().output.classesDirs + sourceSets.main.get().output + configurations.testRuntimeClasspath.get()
+	mainClass = "com.github.melancholic.fintrace.importer.generator.GenerateSyntheticDumpsKt"
+	args(layout.projectDirectory.dir("src/test/resources/synthetic").asFile.path)
+}
+
+tasks.processTestResources {
+	mustRunAfter(generateSyntheticDumps)
+}
+
 tasks.jar {
 	enabled = false
 }
