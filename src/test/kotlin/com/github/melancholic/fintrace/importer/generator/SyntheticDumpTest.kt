@@ -7,7 +7,9 @@ import com.github.melancholic.fintrace.importer.service.interpreter.ChronicleInt
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.springframework.beans.factory.annotation.Autowired
+import com.github.melancholic.fintrace.importer.TestSecurityConfiguration
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.context.annotation.Import
 import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.UUID
@@ -16,6 +18,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @SpringBootTest
+@Import(TestSecurityConfiguration::class)
 class SyntheticDumpTest(
     @Autowired private val loader: MokOperationsLoader,
     @Autowired private val parser: ChronicleParser,

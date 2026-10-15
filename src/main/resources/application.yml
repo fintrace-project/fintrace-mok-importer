@@ -12,9 +12,28 @@ spring:
         base-url: ${FINTRACE_CORE_URL:http://fintrace-core:8080}
         connect-timeout: 5s
         read-timeout: 240s
+  security:
+    oauth2:
+      resourceServer:
+        jwt:
+          audiences: fintrace-mok-importer
+
+springdoc:
+  swagger-ui:
+    oauth:
+      client-id: fintrace-swagger
+      use-pkce-with-authorization-code-grant: true
 
 management:
   endpoints:
     web:
       exposure:
         include: health
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    metrics:
+      export:
+        enabled: false
+

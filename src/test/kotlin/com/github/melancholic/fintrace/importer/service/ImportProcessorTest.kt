@@ -17,7 +17,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import org.springframework.beans.factory.annotation.Autowired
+import com.github.melancholic.fintrace.importer.TestSecurityConfiguration
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.context.annotation.Import
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import java.nio.file.Files
@@ -28,6 +30,7 @@ import kotlin.test.assertTrue
 
 /** The whole pipeline through the configured client, with Core played by WireMock. */
 @SpringBootTest
+@Import(TestSecurityConfiguration::class)
 class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
 
     @TempDir

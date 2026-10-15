@@ -8,11 +8,13 @@ import com.github.melancholic.fintrace.importer.service.interpreter.ChronicleInt
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.context.annotation.Import
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import kotlin.test.assertEquals
 
 @SpringBootTest
+@Import(TestSecurityConfiguration::class)
 class FintraceMokImporterApplicationTest(@Autowired private val interpreter: ChronicleInterpreter) {
 
     @Test
