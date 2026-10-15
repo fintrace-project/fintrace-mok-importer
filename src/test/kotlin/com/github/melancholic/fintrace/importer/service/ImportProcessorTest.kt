@@ -11,6 +11,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
 import com.github.tomakehurst.wiremock.http.Fault
 import com.github.tomakehurst.wiremock.stubbing.Scenario
 import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -22,8 +23,12 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.context.annotation.Import
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -154,6 +159,43 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
     }
 
     @Nested
+    inner class TokenExchange {
+
+        @AfterEach
+        fun signOut() = SecurityContextHolder.clearContext()
+
+        @Test
+        fun `exchanges the caller's token once and calls Core with the exchanged one`() {
+            signIn(subject = "exchanging-user", token = "callers-token")
+            core.stubFor(post(TOKEN_PATH).willReturn(okJson(EXCHANGED)))
+            stubWorkspace(okJson(WORKSPACE))
+            stubImport(okJson(job("SUCCEEDED")))
+
+            processor.processImport(WORKSPACE_ID, emptyDump())
+
+            core.verify(
+                1, postRequestedFor(urlEqualTo(TOKEN_PATH))
+                    .withHeader("Authorization", matching("Basic .+"))
+                    .withRequestBody(containing("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange"))
+                    .withRequestBody(containing("subject_token=callers-token"))
+                    .withRequestBody(containing("audience=fintrace-core"))
+            )
+            core.verify(getRequestedFor(urlEqualTo(WORKSPACE_PATH)).withHeader("Authorization", equalTo("Bearer exchanged-token")))
+            core.verify(postRequestedFor(urlEqualTo(IMPORT_PATH)).withHeader("Authorization", equalTo("Bearer exchanged-token")))
+        }
+
+        private fun signIn(subject: String, token: String) {
+            val jwt = Jwt.withTokenValue(token)
+                .header("alg", "none")
+                .subject(subject)
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(300))
+                .build()
+            SecurityContextHolder.getContext().authentication = JwtAuthenticationToken(jwt)
+        }
+    }
+
+    @Nested
     inner class Retries {
 
         @Test
@@ -222,6 +264,12 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
         private val WORKSPACE_ID = UUID.fromString("01930000-0000-7000-8000-0000000000aa")
         private val WORKSPACE_PATH = "/api/v1/workspaces/$WORKSPACE_ID"
         private val IMPORT_PATH = "$WORKSPACE_PATH/import"
+        private const val TOKEN_PATH = "/token"
+
+        private const val EXCHANGED = """
+            {"access_token":"exchanged-token","token_type":"Bearer","expires_in":300,
+             "issued_token_type":"urn:ietf:params:oauth:token-type:access_token"}
+        """
 
         private val WORKSPACE = """
             {"id":"$WORKSPACE_ID","name":"w","status":"NEW","defaultCurrency":"EUR","version":0,
@@ -254,6 +302,7 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
         fun coreUrl(registry: DynamicPropertyRegistry) {
             registry.add("spring.http.serviceclient.core.base-url") { core.baseUrl() }
             registry.add("spring.http.serviceclient.core.read-timeout") { "${READ_TIMEOUT_MILLIS}ms" }
+            registry.add("fintrace.test.token-uri") { "${core.baseUrl()}$TOKEN_PATH" }
         }
 
         @JvmStatic

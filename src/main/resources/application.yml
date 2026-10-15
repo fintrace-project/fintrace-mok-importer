@@ -16,7 +16,21 @@ spring:
     oauth2:
       resourceServer:
         jwt:
+          # Empty when unset, which Boot treats as absent: a deployment without it fails at startup
+          issuer-uri: ${FINTRACE_OAUTH2_ISSUER_URI:}
           audiences: fintrace-mok-importer
+      client:
+        registration:
+          fintrace-core: # named for the audience it gets tokens for
+            provider: realm
+            client-id: fintrace-mok-importer
+            client-secret: ${FINTRACE_MOK_IMPORTER_CLIENT_SECRET:}
+            client-authentication-method: client_secret_basic
+            authorization-grant-type: urn:ietf:params:oauth:grant-type:token-exchange
+        provider:
+          realm:
+            # Token exchange happens in the realm whose tokens the resource server accepts
+            issuer-uri: ${spring.security.oauth2.resourceserver.jwt.issuer-uri}
 
 springdoc:
   swagger-ui:
@@ -36,4 +50,3 @@ management:
     metrics:
       export:
         enabled: false
-
