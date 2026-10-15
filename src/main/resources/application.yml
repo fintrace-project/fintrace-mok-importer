@@ -50,3 +50,7 @@ management:
     metrics:
       export:
         enabled: false
+
+logging:
+  pattern:
+    correlation: "%X{traceId:-} [user=%X{userId:-}|workspace=%X{workspaceId:-}] "

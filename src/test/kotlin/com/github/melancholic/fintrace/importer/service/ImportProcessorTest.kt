@@ -131,10 +131,18 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
         }
 
         @Test
-        fun `refused credentials are reported as such`() {
+        fun `a caller Core forbids is denied access`() {
             stubWorkspace(aResponse().withStatus(403))
 
             assertThrows<CoreAccessDeniedException> { processor.processImport(WORKSPACE_ID, emptyDump()) }
+        }
+
+        @Test
+        fun `a token Core does not accept is a configuration fault, and not retried`() {
+            stubWorkspace(aResponse().withStatus(401))
+
+            assertThrows<CoreTokenRejectedException> { processor.processImport(WORKSPACE_ID, emptyDump()) }
+            core.verify(1, getRequestedFor(urlEqualTo(WORKSPACE_PATH)))
         }
 
         @Test

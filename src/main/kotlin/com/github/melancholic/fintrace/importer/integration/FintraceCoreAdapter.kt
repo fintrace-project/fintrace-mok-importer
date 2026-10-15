@@ -53,7 +53,8 @@ class FintraceCoreAdapterImpl(
     } catch (e: RestClientResponseException) {
         throw when (e.statusCode.value()) {
             400 -> ImportRequestRejectedException(e)
-            401, 403 -> CoreAccessDeniedException(e)
+            401 -> CoreTokenRejectedException(e)
+            403 -> CoreAccessDeniedException(e)
             404 -> WorkspaceNotFoundException(workspaceId, e)
             409 -> WorkspaceNotImportableException(workspaceId, e)
             else -> CoreUnavailableException(e)

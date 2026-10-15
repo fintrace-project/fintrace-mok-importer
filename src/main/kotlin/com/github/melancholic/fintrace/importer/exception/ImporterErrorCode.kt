@@ -1,0 +1,16 @@
+package com.github.melancholic.fintrace.importer.exception
+
+enum class ImporterErrorCode {
+    INVALID_DUMP,
+    CALLER_TOKEN_REJECTED,
+    CORE_ACCESS_DENIED,
+    WORKSPACE_NOT_FOUND,
+    WORKSPACE_NOT_IMPORTABLE,
+    REALM_UNREACHABLE,
+    EXCHANGE_MISCONFIGURED,
+    CORE_TOKEN_REJECTED,
+    CORE_UNAVAILABLE,
+    IMPORT_OUTCOME_UNKNOWN,
+    CONTRACT_VIOLATION,
+    INTERNAL,
+}
