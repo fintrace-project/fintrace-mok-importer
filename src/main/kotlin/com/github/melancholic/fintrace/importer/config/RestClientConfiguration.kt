@@ -42,6 +42,6 @@ class RestClientConfiguration {
     }
 
     companion object {
-        const val CORE_GROUP = "core"
+        const val CORE_GROUP = "fintrace-core"
     }
 }

@@ -74,6 +74,45 @@ class CallLoggingInterceptorTest {
     }
 
     @Test
+    fun `masks the tokens in a form body and keeps the other fields`() {
+        logger.level = Level.DEBUG
+        val form = "subject_token=callers-token&audience=fintrace-core&client_secret=s3cret&actor_token=actors-token"
+
+        interceptor.intercept(request(), form.toByteArray(), answering("{}"))
+
+        val request = appender.list.first { it.level == Level.DEBUG }.formattedMessage
+        assertFalse(listOf("callers-token", "s3cret", "actors-token").any(request::contains), request)
+        assertTrue(request.contains("body=subject_token=***&audience=fintrace-core&client_secret=***&actor_token=***"), request)
+    }
+
+    @Test
+    fun `masks the tokens in a JSON body and keeps the other fields`() {
+        logger.level = Level.DEBUG
+        val json = """{"access_token":"exchanged-token","refresh_token" : "refresh-token","token_type":"Bearer"}"""
+
+        interceptor.intercept(request(), ByteArray(0), answering(json))
+
+        val response = appender.list.filter { it.level == Level.DEBUG }[1].formattedMessage
+        assertFalse(response.contains("exchanged-token") || response.contains("refresh-token"), response)
+        assertTrue(response.contains("""{"access_token":"***","refresh_token" : "***","token_type":"Bearer"}"""), response)
+    }
+
+    @Test
+    fun `masks a token the truncation cuts short`() {
+        logger.level = Level.DEBUG
+        val lead = """{"pad":""""
+        val key = """","access_token":""""
+        val pad = "x".repeat(8 * 1024 - 50 - lead.length - key.length)
+        val json = lead + pad + key + "T".repeat(100) + "\"}"
+
+        interceptor.intercept(request(), ByteArray(0), answering(json))
+
+        val response = appender.list.filter { it.level == Level.DEBUG }[1].formattedMessage
+        assertFalse(response.contains("TTT"), response.takeLast(80))
+        assertTrue(response.contains(""""access_token":"***"… ("""), response.takeLast(80))
+    }
+
+    @Test
     fun `cuts a large body short, saying how large it was`() {
         logger.level = Level.DEBUG
 

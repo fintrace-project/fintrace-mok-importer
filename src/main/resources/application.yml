@@ -7,8 +7,8 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
   http:
-    serviceClient:
-      core:
+    service-client:
+      fintrace-core:
         base-url: ${FINTRACE_CORE_URL:http://fintrace-core:8080}
         connect-timeout: 5s
         read-timeout: 240s

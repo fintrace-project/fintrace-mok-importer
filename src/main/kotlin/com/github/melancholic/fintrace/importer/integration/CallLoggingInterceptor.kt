@@ -48,9 +48,13 @@ class CallLoggingInterceptor(private val target: String) : ClientHttpRequestInte
 
     private fun excerpt(bytes: ByteArray): String = when {
         bytes.isEmpty() -> "<empty>"
-        bytes.size <= MAX_LOGGED_BODY -> String(bytes)
-        else -> String(bytes, 0, MAX_LOGGED_BODY) + "… (${bytes.size} bytes)"
+        bytes.size <= MAX_LOGGED_BODY -> masked(String(bytes))
+        else -> masked(String(bytes, 0, MAX_LOGGED_BODY)) + "… (${bytes.size} bytes)"
     }
+
+    private fun masked(body: String): String = body
+        .replace(SECRET_FORM_FIELD, "$1$2=***")
+        .replace(SECRET_JSON_FIELD, "$1\"***\"")
 
     private fun elapsedMillis(started: Long) = (System.nanoTime() - started) / 1_000_000
 
@@ -70,5 +74,11 @@ class CallLoggingInterceptor(private val target: String) : ClientHttpRequestInte
         // An import payload runs to megabytes; the head of it is what a debugging session needs
         const val MAX_LOGGED_BODY = 8 * 1024
         val SECRET_HEADERS = setOf("authorization", "proxy-authorization", "cookie", "set-cookie")
+
+        private val SECRET_FIELDS = listOf(
+            "subject_token", "actor_token", "access_token", "refresh_token", "id_token", "client_secret",
+        ).joinToString("|")
+        val SECRET_FORM_FIELD = Regex("""(^|&)($SECRET_FIELDS)=[^&]*""")
+        val SECRET_JSON_FIELD = Regex("""("(?:$SECRET_FIELDS)"\s*:\s*)"[^"]*"?""")
     }
 }

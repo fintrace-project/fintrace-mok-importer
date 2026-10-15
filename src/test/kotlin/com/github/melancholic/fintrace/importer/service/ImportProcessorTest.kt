@@ -1,6 +1,10 @@
 package com.github.melancholic.fintrace.importer.service
 
+import ch.qos.logback.classic.Logger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.github.melancholic.fintrace.importer.ChronicleFixture
+import com.github.melancholic.fintrace.importer.integration.CallLoggingInterceptor
 import com.github.melancholic.fintrace.importer.contract.ImportJobResponse
 import com.github.melancholic.fintrace.importer.contract.ImportProblemDTO
 import com.github.melancholic.fintrace.importer.exception.*
@@ -17,6 +21,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import com.github.melancholic.fintrace.importer.TestSecurityConfiguration
 import org.springframework.boot.test.context.SpringBootTest
@@ -184,6 +189,36 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
             core.verify(postRequestedFor(urlEqualTo(IMPORT_PATH)).withHeader("Authorization", equalTo("Bearer exchanged-token")))
         }
 
+        @Test
+        fun `the exchange call is logged, and an expired caller token is unauthorized and not retried`() {
+            signIn(subject = "expired-user", token = "expired-token")
+            core.stubFor(post(TOKEN_PATH).willReturn(jsonWith(400, """{"error":"invalid_grant"}""")))
+            val logger = LoggerFactory.getLogger(CallLoggingInterceptor::class.java) as Logger
+            val calls = ListAppender<ILoggingEvent>().apply { start() }
+            logger.addAppender(calls)
+
+            try {
+                assertThrows<UnauthorizedException> { processor.processImport(WORKSPACE_ID, emptyDump()) }
+            } finally {
+                logger.detachAppender(calls)
+            }
+
+            assertTrue(calls.list.any { it.formattedMessage.startsWith("realm POST ${core.baseUrl()}$TOKEN_PATH -> 400") })
+            core.verify(1, postRequestedFor(urlEqualTo(TOKEN_PATH)))
+            core.verify(0, getRequestedFor(urlEqualTo(WORKSPACE_PATH)))
+        }
+
+        @Test
+        fun `a realm that cannot be reached is retried, and Core is never called`() {
+            signIn(subject = "unlucky-user", token = "callers-token")
+            core.stubFor(post(TOKEN_PATH).willReturn(aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)))
+
+            assertThrows<RealmUnreachableException> { processor.processImport(WORKSPACE_ID, emptyDump()) }
+
+            core.verify(4, postRequestedFor(urlEqualTo(TOKEN_PATH)))
+            core.verify(0, getRequestedFor(urlEqualTo(WORKSPACE_PATH)))
+        }
+
         private fun signIn(subject: String, token: String) {
             val jwt = Jwt.withTokenValue(token)
                 .header("alg", "none")
@@ -300,8 +335,8 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
         @JvmStatic
         @DynamicPropertySource
         fun coreUrl(registry: DynamicPropertyRegistry) {
-            registry.add("spring.http.serviceclient.core.base-url") { core.baseUrl() }
-            registry.add("spring.http.serviceclient.core.read-timeout") { "${READ_TIMEOUT_MILLIS}ms" }
+            registry.add("spring.http.service-client.fintrace-core.base-url") { core.baseUrl() }
+            registry.add("spring.http.service-client.fintrace-core.read-timeout") { "${READ_TIMEOUT_MILLIS}ms" }
             registry.add("fintrace.test.token-uri") { "${core.baseUrl()}$TOKEN_PATH" }
         }
 
