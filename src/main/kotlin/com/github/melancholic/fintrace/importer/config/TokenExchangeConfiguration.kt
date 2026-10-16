@@ -11,7 +11,9 @@ import org.springframework.security.oauth2.client.TokenExchangeOAuth2AuthorizedC
 import org.springframework.security.oauth2.client.endpoint.RestClientTokenExchangeTokenResponseClient
 import org.springframework.security.oauth2.client.http.OAuth2ErrorResponseErrorHandler
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository
+import org.springframework.security.oauth2.core.OAuth2AccessToken
 import org.springframework.security.oauth2.core.http.converter.OAuth2AccessTokenResponseHttpMessageConverter
+import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
 
@@ -25,6 +27,12 @@ class TokenExchangeConfiguration {
     ): OAuth2AuthorizedClientManager =
         AuthorizedClientServiceOAuth2AuthorizedClientManager(registrations, authorizedClients).apply {
             setAuthorizedClientProvider(TokenExchangeOAuth2AuthorizedClientProvider().apply {
+                // Keycloak's standard exchange accepts only an access-token subject; Spring would send a Jwt as type jwt
+                setSubjectTokenResolver { context ->
+                    (context.principal.principal as? Jwt)?.let {
+                        OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, it.tokenValue, it.issuedAt, it.expiresAt)
+                    }
+                }
                 setAccessTokenResponseClient(RestClientTokenExchangeTokenResponseClient().apply {
                     setRestClient(realmRestClient())
                     addParametersConverter { LinkedMultiValueMap<String, String>().apply { add("audience", CORE_AUDIENCE) } }

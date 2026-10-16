@@ -26,8 +26,8 @@ class UnauthorizedException(cause: Throwable? = null)
     override val code = ImporterErrorCode.CALLER_TOKEN_REJECTED
 }
 
-class TokenExchangeMisconfiguredException(errorCode: String, cause: Throwable? = null)
-    : InfrastructureException("The realm refused the token exchange with '$errorCode'; check the importer's client and the realm's exchange settings", cause) {
+class TokenExchangeMisconfiguredException(errorCode: String, description: String?, cause: Throwable? = null)
+    : InfrastructureException("The realm refused the token exchange with '$errorCode' (${description ?: "no description"}); check the importer's client and the realm's exchange settings", cause) {
     override val code = ImporterErrorCode.EXCHANGE_MISCONFIGURED
 }
 

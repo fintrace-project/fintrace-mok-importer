@@ -192,6 +192,7 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
                     .withRequestBody(containing("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Atoken-exchange"))
                     .withRequestBody(containing("subject_token=callers-token"))
                     .withRequestBody(containing("audience=fintrace-core"))
+                    .withRequestBody(containing("subject_token_type=urn%3Aietf%3Aparams%3Aoauth%3Atoken-type%3Aaccess_token"))
             )
             core.verify(getRequestedFor(urlEqualTo(WORKSPACE_PATH)).withHeader("Authorization", equalTo("Bearer exchanged-token")))
             core.verify(postRequestedFor(urlEqualTo(IMPORT_PATH)).withHeader("Authorization", equalTo("Bearer exchanged-token")))

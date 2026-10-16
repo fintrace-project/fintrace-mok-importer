@@ -37,6 +37,16 @@ class FintraceCoreAdapterTest {
     }
 
     @Test
+    fun `a refusal keeps the realm's description for the log`() {
+        val error = OAuth2Error("invalid_request", "Parameter 'subject_token_type' is not supported", null)
+        val refused = ClientAuthorizationException(error, REGISTRATION, OAuth2AuthorizationException(error))
+
+        val e = assertThrows<TokenExchangeMisconfiguredException> { adapterFailingWith(refused).getWorkspace(WORKSPACE_ID) }
+
+        assertTrue(e.message!!.contains("Parameter 'subject_token_type' is not supported"), e.message)
+    }
+
+    @Test
     fun `a realm that cannot be reached is unreachable, on the import too`() {
         val transport = OAuth2AuthorizationException(
             OAuth2Error(INVALID_TOKEN_RESPONSE),

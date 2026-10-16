@@ -48,7 +48,7 @@ class FintraceCoreAdapterImpl(
         throw when {
             e.error.errorCode == INVALID_GRANT -> UnauthorizedException(e)
             e.causes().any { it is ResourceAccessException } -> RealmUnreachableException(e)
-            else -> TokenExchangeMisconfiguredException(e.error.errorCode, e)
+            else -> TokenExchangeMisconfiguredException(e.error.errorCode, e.error.description, e)
         }
     } catch (e: RestClientResponseException) {
         throw when (e.statusCode.value()) {
