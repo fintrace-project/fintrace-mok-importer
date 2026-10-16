@@ -85,6 +85,35 @@ class ChronicleInterpreterTest {
         }
 
         @Test
+        fun `an amount change and an account move in one update follow both gates`() {
+            fun updated(gates: Boolean) = interpretChronicle(
+                Log().account(1, "0").account(2, "0").expense(1, 1, "10")
+                    .updateMoneyAndMove(1, "25", to = 2, moneyBack = gates, moneyBack2 = gates)
+            )
+
+            assertEquals(money("0"), updated(true).finalBalance(1))
+            assertEquals(money("-25"), updated(true).finalBalance(2))
+            assertEquals(money("-10"), updated(false).finalBalance(1))
+            assertEquals(money("0"), updated(false).finalBalance(2))
+            assertEquals(updated(false).account(2).id, updated(false).operations.single().accountId)
+        }
+
+        @Test
+        fun `a date update moves the operation to its new date`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").expense(1, 1, "10", at = day(5)).redate(1, day(2)))
+
+            assertEquals(day(2), snapshot.operations.single().occurredAt)
+        }
+
+        @Test
+        fun `a balance assignment from zero leaves the opening balance alone`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").assignBalance(1, "500"))
+
+            assertEquals(money("0"), snapshot.account(1).initialBalance)
+            assertEquals(money("500"), snapshot.finalBalance(1))
+        }
+
+        @Test
         fun `a balance assignment sets the balance and becomes an anchor`() {
             val snapshot = interpretChronicle(Log().account(1, "0").expense(1, 1, "10").assignBalance(1, "500").income(2, 1, "5"))
 
@@ -236,6 +265,20 @@ class ChronicleInterpreterTest {
         }
 
         @Test
+        fun `deleting a transfer with an orphaned leg reverts only the surviving side`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").account(2, "0")
+                    .transfer(1, from = 1, to = 2, money = "30")
+                    .deleteAccount(2)
+                    .deleteTransfer(1)
+            )
+
+            assertTrue(snapshot.transfers.isEmpty())
+            assertEquals(money("100"), snapshot.finalBalance(1))
+            assertEquals(money("0"), snapshot.finalBalance(2))
+        }
+
+        @Test
         fun `a transfer whose sides are deleted in separate events is dropped, in either order`() {
             fun deletedInOrder(first: Long, second: Long) = interpretChronicle(
                 Log().account(1, "100").account(2, "0").account(3, "0")
@@ -304,6 +347,13 @@ class ChronicleInterpreterTest {
 
             assertEquals(money("100"), snapshot.transfers.single().target.amount)
             assertEquals(money("100"), snapshot.finalBalance(2))
+        }
+
+        @Test
+        fun `a date update moves the transfer to its new date`() {
+            val snapshot = interpretChronicle(Log().account(1, "100").account(2, "0").transfer(1, 1, 2, "40", at = day(5)).redateTransfer(1, day(2)))
+
+            assertEquals(day(2), snapshot.transfers.single().occurredAt)
         }
 
         @Test
@@ -632,6 +682,12 @@ class ChronicleInterpreterTest {
         fun moveOperation(uid: Long, to: Long, moneyBack2: Boolean) =
             add { UpdateTransaction(it, null, uid, to, null, null, null, moneyBack2, null) }
 
+        fun updateMoneyAndMove(uid: Long, money: String, to: Long, moneyBack: Boolean, moneyBack2: Boolean) =
+            add { UpdateTransaction(it, null, uid, to, null, money(money), moneyBack, moneyBack2, null) }
+
+        fun redate(uid: Long, at: LocalDateTime) =
+            add { UpdateTransaction(it, at, uid, null, null, null, null, null, null) }
+
         fun deleteOperation(uid: Long, moneyBack: Boolean) = add { DeleteTransaction(it, null, uid, moneyBack) }
 
         fun transfer(uid: Long, from: Long, to: Long, money: String, moneyTo: String? = null, at: LocalDateTime = day(1)) =
@@ -642,6 +698,9 @@ class ChronicleInterpreterTest {
 
         fun updateTransferNote(uid: Long, note: String) =
             add { UpdatedTransfer(it, null, uid, null, null, null, null, note) }
+
+        fun redateTransfer(uid: Long, at: LocalDateTime) =
+            add { UpdatedTransfer(it, at, uid, null, null, null, null, null) }
 
         fun repointTransfer(uid: Long, from: Long? = null, to: Long? = null) =
             add { UpdatedTransfer(it, null, uid, null, null, from, to, null) }
