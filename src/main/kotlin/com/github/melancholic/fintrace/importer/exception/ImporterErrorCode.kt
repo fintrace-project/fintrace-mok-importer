@@ -2,6 +2,9 @@ package com.github.melancholic.fintrace.importer.exception
 
 enum class ImporterErrorCode {
     INVALID_DUMP,
+    DUMP_TOO_LARGE,
+    MALFORMED_REQUEST,
+    NOT_FOUND,
     CALLER_TOKEN_REJECTED,
     CORE_ACCESS_DENIED,
     WORKSPACE_NOT_FOUND,

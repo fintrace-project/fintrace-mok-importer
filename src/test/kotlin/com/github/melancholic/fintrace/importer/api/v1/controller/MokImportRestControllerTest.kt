@@ -26,6 +26,7 @@ import org.springframework.mock.web.MockMultipartFile
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -144,6 +145,28 @@ class MokImportRestControllerTest(
         mvc.perform(multipart(IMPORT_PATH, WORKSPACE_ID).with(jwt()))
             .andExpect(status().isBadRequest)
             .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"))
+    }
+
+    @Test
+    fun `a workspace id that is not a UUID is Spring's 400 with a code`() {
+        mvc.perform(
+            multipart(IMPORT_PATH, "not-a-uuid")
+                .file(MockMultipartFile("file", "dump.mok", "application/octet-stream", dump()))
+                .with(jwt())
+        )
+            .andExpect(status().isBadRequest)
+            .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"))
+
+        verify(processor, never()).processImport(anyWorkspace(), anyDump())
+    }
+
+    @Test
+    fun `an unknown path is Spring's 404 with a code`() {
+        mvc.perform(get("/api/v1/nowhere").with(jwt()))
+            .andExpect(status().isNotFound)
+            .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+            .andExpect(jsonPath("$.code").value("NOT_FOUND"))
     }
 
     private fun answering(job: ImportJobResponse) =

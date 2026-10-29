@@ -4,11 +4,17 @@ import com.github.melancholic.fintrace.importer.exception.*
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.github.oshai.kotlinlogging.Level
 import org.slf4j.MDC
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.HttpStatusCode
 import org.springframework.http.ProblemDetail
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
+import org.springframework.web.context.request.WebRequest
+import org.springframework.web.multipart.MaxUploadSizeExceededException
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler
+import org.springframework.web.servlet.resource.NoResourceFoundException
 
 
 @RestControllerAdvice
@@ -35,6 +41,29 @@ class RestControllerErrorHandler : ResponseEntityExceptionHandler() {
     fun handleUnexpected(e: Exception): ProblemDetail {
         log.error(e) { "Unhandled ${e.javaClass.simpleName}" }
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, ImporterErrorCode.INTERNAL, DEF_MESSAGE)
+    }
+
+    override fun handleExceptionInternal(
+        ex: Exception,
+        body: Any?,
+        headers: HttpHeaders,
+        statusCode: HttpStatusCode,
+        request: WebRequest
+    ): ResponseEntity<Any>? {
+        log.debug { "${statusCode.value()} ${ex.javaClass.simpleName}: ${ex.message}" }
+        val response = super.handleExceptionInternal(ex, body, headers, statusCode, request)
+        (response?.body as? ProblemDetail)?.apply {
+            setProperty("code", springCodeOf(ex, statusCode))
+            MDC.get("traceId")?.let { setProperty("traceId", it) }
+        }
+        return response
+    }
+
+    private fun springCodeOf(ex: Exception, statusCode: HttpStatusCode) = when {
+        ex is MaxUploadSizeExceededException -> ImporterErrorCode.DUMP_TOO_LARGE
+        ex is NoResourceFoundException -> ImporterErrorCode.NOT_FOUND
+        statusCode.is5xxServerError -> ImporterErrorCode.INTERNAL
+        else -> ImporterErrorCode.MALFORMED_REQUEST
     }
 
     private fun problem(status: HttpStatus, code: ImporterErrorCode, detail: String?) =
