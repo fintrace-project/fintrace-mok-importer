@@ -52,8 +52,8 @@ class ImportRequestFactoryImpl(
                 id = it.id,
                 externalRef = "${if (it.isGroup) "MOK-GROUP" else "MOK-CATEGORY"}#${it.uid}",                name = it.name,
                 kind = when (it.kind) {
-                    CategoryType.INCOME -> ImportCategoryRequest.Kind.INCOME
-                    CategoryType.EXPENSE -> ImportCategoryRequest.Kind.EXPENSE
+                    CategoryType.INCOME -> CategoryKind.INCOME
+                    CategoryType.EXPENSE -> CategoryKind.EXPENSE
                 },
                 parentId = it.parentId,
             )
@@ -67,8 +67,8 @@ class ImportRequestFactoryImpl(
                 occurredAt = it.occurredAt,
                 amount = it.amount,
                 kind = when (it.kind) {
-                    CategoryType.INCOME -> ImportOperationRequest.Kind.INCOME
-                    CategoryType.EXPENSE -> ImportOperationRequest.Kind.EXPENSE
+                    CategoryType.INCOME -> OperationKind.INCOME
+                    CategoryType.EXPENSE -> OperationKind.EXPENSE
                 },
                 accountId = it.accountId,
                 categoryId = it.categoryId,
@@ -109,14 +109,14 @@ class ImportRequestFactoryImpl(
             .map {
                 ImportDiagnosticRequest(
                     severity = when (it.severity) {
-                        Diagnostic.Severity.WARNING -> ImportDiagnosticRequest.Severity.WARNING
-                        Diagnostic.Severity.ERROR -> ImportDiagnosticRequest.Severity.ERROR
+                        Diagnostic.Severity.WARNING -> ImportDiagnosticSeverity.WARNING
+                        Diagnostic.Severity.ERROR -> ImportDiagnosticSeverity.ERROR
                     },
                     code = when (it.code) {
-                        Diagnostic.Code.UNSUPPORTED_RECORD -> ImportDiagnosticRequest.Code.UNSUPPORTED_RECORD
-                        Diagnostic.Code.UNKNOWN_CURRENCY -> ImportDiagnosticRequest.Code.UNKNOWN_CURRENCY
-                        Diagnostic.Code.UNRESOLVED_REFERENCE -> ImportDiagnosticRequest.Code.UNRESOLVED_REFERENCE
-                        Diagnostic.Code.SOURCE_ANOMALY -> ImportDiagnosticRequest.Code.SOURCE_ANOMALY
+                        Diagnostic.Code.UNSUPPORTED_RECORD -> ImportDiagnosticCode.UNSUPPORTED_RECORD
+                        Diagnostic.Code.UNKNOWN_CURRENCY -> ImportDiagnosticCode.UNKNOWN_CURRENCY
+                        Diagnostic.Code.UNRESOLVED_REFERENCE -> ImportDiagnosticCode.UNRESOLVED_REFERENCE
+                        Diagnostic.Code.SOURCE_ANOMALY -> ImportDiagnosticCode.SOURCE_ANOMALY
                     },
                     count = it.count,
                     detail = it.detail
@@ -127,8 +127,8 @@ class ImportRequestFactoryImpl(
         renumbering?.let {
             result.add(
                 ImportDiagnosticRequest(
-                    severity = ImportDiagnosticRequest.Severity.WARNING,
-                    code = ImportDiagnosticRequest.Code.SOURCE_ANOMALY,
+                    severity = ImportDiagnosticSeverity.WARNING,
+                    code = ImportDiagnosticCode.SOURCE_ANOMALY,
                     count = 1,
                     detail = "Inconsistency was detected between the sequence's last value (${renumbering.sequence}) and the maximum ID (${renumbering.maxUid})"
                 )

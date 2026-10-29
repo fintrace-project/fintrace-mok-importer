@@ -5,8 +5,8 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import com.github.melancholic.fintrace.importer.ChronicleFixture
 import com.github.melancholic.fintrace.importer.integration.CallLoggingInterceptor
-import com.github.melancholic.fintrace.importer.contract.ImportJobResponse
-import com.github.melancholic.fintrace.importer.contract.ImportProblemDTO
+import com.github.melancholic.fintrace.importer.contract.ImportJobStatus
+import com.github.melancholic.fintrace.importer.contract.ImportProblemCode
 import com.github.melancholic.fintrace.importer.exception.*
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder
@@ -59,7 +59,7 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
 
             val job = processor.processImport(WORKSPACE_ID, emptyDump())
 
-            assertEquals(ImportJobResponse.Status.SUCCEEDED, job.status)
+            assertEquals(ImportJobStatus.SUCCEEDED, job.status)
             core.verify(1, getRequestedFor(urlEqualTo(WORKSPACE_PATH)))
             core.verify(
                 1, postRequestedFor(urlEqualTo(IMPORT_PATH))
@@ -76,8 +76,8 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
 
             val job = processor.processImport(WORKSPACE_ID, emptyDump())
 
-            assertEquals(ImportJobResponse.Status.FAILED, job.status)
-            assertEquals(ImportProblemDTO.Code.REFUSED_BY_COMMAND, job.problems.single().code)
+            assertEquals(ImportJobStatus.FAILED, job.status)
+            assertEquals(ImportProblemCode.REFUSED_BY_COMMAND, job.problems.single().code)
         }
 
         @Test
@@ -256,7 +256,7 @@ class ImportProcessorTest(@Autowired private val processor: ImportProcessor) {
 
             val job = processor.processImport(WORKSPACE_ID, emptyDump())
 
-            assertEquals(ImportJobResponse.Status.SUCCEEDED, job.status)
+            assertEquals(ImportJobStatus.SUCCEEDED, job.status)
             core.verify(2, getRequestedFor(urlEqualTo(WORKSPACE_PATH)))
         }
 

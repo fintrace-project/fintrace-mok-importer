@@ -82,6 +82,8 @@ openApiGenerate {
 		"ImportOperationRequest", "ImportTransferRequest", "ImportTransferLegRequest",
 		"ImportBalanceAnchorRequest", "ImportDiagnosticRequest", "ImportJobResponse",
 		"ImportDiagnosticDTO", "ImportProblemDTO", "WorkspaceResponse",
+		"CategoryKind", "OperationKind", "WorkspaceStatus", "EntityType", "ImportJobStatus",
+		"ImportDiagnosticCode", "ImportDiagnosticSeverity", "ImportProblemCode",
 	)
 	generateModelDocumentation = false
 	generateModelTests = false

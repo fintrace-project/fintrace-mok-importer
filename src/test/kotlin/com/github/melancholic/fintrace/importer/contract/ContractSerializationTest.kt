@@ -20,7 +20,7 @@ class ContractSerializationTest {
             id = UUID.fromString("0199c9f0-0000-7000-8000-000000000001"),
             occurredAt = LocalDateTime.of(2025, 1, 5, 23, 6, 24),
             amount = BigDecimal("999.99"),
-            kind = ImportOperationRequest.Kind.EXPENSE,
+            kind = OperationKind.EXPENSE,
             accountId = UUID.fromString("0199c9f0-0000-7000-8000-000000000002"),
         )
 
@@ -44,8 +44,8 @@ class ContractSerializationTest {
             """
         )
 
-        assertEquals(ImportJobResponse.Status.FAILED, job.status)
+        assertEquals(ImportJobStatus.FAILED, job.status)
         assertEquals(LocalDateTime.of(2025, 1, 5, 23, 6, 24), job.startedAt)
-        assertEquals(ImportProblemDTO.Code.UNRESOLVED_REFERENCE, job.problems.single().code)
+        assertEquals(ImportProblemCode.UNRESOLVED_REFERENCE, job.problems.single().code)
     }
 }

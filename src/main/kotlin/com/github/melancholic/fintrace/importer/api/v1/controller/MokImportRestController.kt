@@ -1,6 +1,7 @@
 package com.github.melancholic.fintrace.importer.api.v1.controller
 
 import com.github.melancholic.fintrace.importer.contract.ImportJobResponse
+import com.github.melancholic.fintrace.importer.contract.ImportJobStatus
 import com.github.melancholic.fintrace.importer.facade.MokImportFacade
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
@@ -129,7 +130,7 @@ class MokImportRestController(
         val job = facade.importMokDumpFile(workspaceId, file)
 
         val status = when (job.status) {
-            ImportJobResponse.Status.FAILED -> HttpStatus.UNPROCESSABLE_CONTENT
+            ImportJobStatus.FAILED -> HttpStatus.UNPROCESSABLE_CONTENT
             else -> HttpStatus.OK
         }
         return ResponseEntity.status(status).body(job)

@@ -1,8 +1,9 @@
 package com.github.melancholic.fintrace.importer.service
 
-import com.github.melancholic.fintrace.importer.contract.ImportCategoryRequest
-import com.github.melancholic.fintrace.importer.contract.ImportDiagnosticRequest
-import com.github.melancholic.fintrace.importer.contract.ImportOperationRequest
+import com.github.melancholic.fintrace.importer.contract.CategoryKind
+import com.github.melancholic.fintrace.importer.contract.ImportDiagnosticCode
+import com.github.melancholic.fintrace.importer.contract.ImportDiagnosticSeverity
+import com.github.melancholic.fintrace.importer.contract.OperationKind
 import com.github.melancholic.fintrace.importer.domain.*
 import org.junit.jupiter.api.Test
 import org.springframework.boot.info.BuildProperties
@@ -68,7 +69,7 @@ class ImportRequestFactoryTest {
             snapshot(categories = listOf(category(1, false, CategoryType.INCOME), category(2, false, CategoryType.EXPENSE)))
         ).payload.categories!!
 
-        assertEquals(listOf(ImportCategoryRequest.Kind.INCOME, ImportCategoryRequest.Kind.EXPENSE), categories.map { it.kind })
+        assertEquals(listOf(CategoryKind.INCOME, CategoryKind.EXPENSE), categories.map { it.kind })
     }
 
     @Test
@@ -99,7 +100,7 @@ class ImportRequestFactoryTest {
 
         assertEquals(listOf("MOK-OPERATION#11", "MOK-OPERATION#12"), requests.map { it.externalRef })
         assertEquals(listOf(BigDecimal("30"), BigDecimal("50")), requests.map { it.amount })
-        assertEquals(listOf(ImportOperationRequest.Kind.EXPENSE, ImportOperationRequest.Kind.INCOME), requests.map { it.kind })
+        assertEquals(listOf(OperationKind.EXPENSE, OperationKind.INCOME), requests.map { it.kind })
         assertEquals(listOf(categoryId, null), requests.map { it.categoryId })
         assertEquals(listOf("lunch", null), requests.map { it.comment })
     }
@@ -158,13 +159,13 @@ class ImportRequestFactoryTest {
 
         assertEquals(2, requests.size)
         with(requests[0]) {
-            assertEquals(ImportDiagnosticRequest.Code.UNSUPPORTED_RECORD, code)
+            assertEquals(ImportDiagnosticCode.UNSUPPORTED_RECORD, code)
             assertEquals(4, count)
             assertEquals("type=110", detail)
         }
         with(requests[1]) {
-            assertEquals(ImportDiagnosticRequest.Severity.WARNING, severity)
-            assertEquals(ImportDiagnosticRequest.Code.SOURCE_ANOMALY, code)
+            assertEquals(ImportDiagnosticSeverity.WARNING, severity)
+            assertEquals(ImportDiagnosticCode.SOURCE_ANOMALY, code)
             assertEquals(1, count)
         }
     }
