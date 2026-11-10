@@ -573,10 +573,61 @@ class ChronicleInterpreterTest {
         }
 
         @Test
-        fun `a chronicle running into the future is refused`() {
-            assertFailsWith<InvalidChronicleException> {
+        fun `final anchors follow the latest event when the last one is back-dated`() {
+            val snapshot = interpretChronicle(Log().account(1, "0").income(1, 1, "5", at = day(20)).income(2, 1, "5", at = day(5)))
+
+            assertTrue(snapshot.anchorsOf(1).maxOf { it.occurredAt } > day(20))
+        }
+
+        @Test
+        fun `a surviving future entry is refused, naming it`() {
+            val e = assertFailsWith<InvalidChronicleException> {
                 interpretChronicle(Log().account(1, "0").income(1, 1, "5", at = now.plusDays(3)))
             }
+            assertTrue(e.message!!.contains("uid 1 is dated ${now.plusDays(3)}"))
+        }
+
+        @Test
+        fun `a deleted future entry imports, every anchor before now`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "5", at = day(2))
+                    .income(2, 1, "7", at = now.plusDays(1)).deleteOperation(2, true)
+            )
+
+            assertTrue(snapshot.anchors.all { it.occurredAt < now })
+            assertEquals(money("5"), snapshot.finalBalance(1))
+        }
+
+        @Test
+        fun `a future entry re-dated back imports`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "5", at = now.plusDays(1)).redate(1, day(3))
+            )
+
+            assertTrue(snapshot.anchors.all { it.occurredAt < now })
+            assertEquals(day(3), snapshot.operations.single().occurredAt)
+        }
+
+        @Test
+        fun `balance assignments after a deleted future entry stay before now`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "5", at = day(2))
+                    .income(2, 1, "7", at = now.plusDays(1)).deleteOperation(2, true)
+                    .assignBalance(1, "8").assignBalance(1, "9")
+            )
+
+            assertTrue(snapshot.anchors.all { it.occurredAt < now })
+            assertEquals(money("9"), snapshot.finalBalance(1))
+        }
+
+        @Test
+        fun `a deleted future entry as the only dated event keeps opening anchors before now`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "3").income(1, 1, "7", at = now.plusDays(1)).deleteOperation(1, true)
+            )
+
+            assertTrue(snapshot.accounts.all { it.initialBalanceAt < now })
+            assertTrue(snapshot.anchors.all { it.occurredAt < now })
         }
 
         @Test
@@ -592,6 +643,108 @@ class ChronicleInterpreterTest {
                 assertTrue(instants.zipWithNext().all { (a, b) -> a < b })
                 assertTrue(instants.all { it.nano % 1_000 == 0 })
             }
+        }
+    }
+
+    @Nested
+    inner class FutureEntries {
+
+        private val tomorrow = now.plusDays(1)
+
+        private fun ChronicleSnapshot.assertAllBeforeNow() {
+            assertTrue(anchors.all { it.occurredAt < now })
+            assertTrue(accounts.all { it.initialBalanceAt < now })
+        }
+
+        @Test
+        fun `a future expense deleted without moneyBack keeps its amount in the final anchor`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").expense(1, 1, "7", at = tomorrow).deleteOperation(1, moneyBack = false)
+            )
+
+            snapshot.assertAllBeforeNow()
+            assertTrue(snapshot.operations.isEmpty())
+            assertEquals(money("-7"), snapshot.finalBalance(1))
+        }
+
+        @Test
+        fun `a future transfer, deleted, imports`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "10").account(2, "0").transfer(1, 1, 2, "4", at = tomorrow).deleteTransfer(1)
+            )
+
+            snapshot.assertAllBeforeNow()
+            assertTrue(snapshot.transfers.isEmpty())
+            assertEquals(money("10"), snapshot.finalBalance(1))
+            assertEquals(money("0"), snapshot.finalBalance(2))
+        }
+
+        @Test
+        fun `a future transfer re-dated back imports`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "10").account(2, "0").transfer(1, 1, 2, "4", at = tomorrow).redateTransfer(1, day(3))
+            )
+
+            snapshot.assertAllBeforeNow()
+            assertEquals(day(3), snapshot.transfers.single().occurredAt)
+        }
+
+        @Test
+        fun `a surviving future transfer is refused, naming it`() {
+            val e = assertFailsWith<InvalidChronicleException> {
+                interpretChronicle(Log().account(1, "10").account(2, "0").transfer(7, 1, 2, "4", at = tomorrow))
+            }
+
+            assertTrue(e.message!!.contains("uid 7 is dated $tomorrow"))
+        }
+
+        @Test
+        fun `a past operation re-dated into the future is refused`() {
+            val e = assertFailsWith<InvalidChronicleException> {
+                interpretChronicle(Log().account(1, "0").income(3, 1, "5", at = day(2)).redate(3, tomorrow))
+            }
+
+            assertTrue(e.message!!.contains("uid 3 is dated $tomorrow"))
+        }
+
+        @Test
+        fun `a future operation on a deleted account imports`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").account(2, "0").income(1, 2, "5", at = day(2))
+                    .expense(2, 1, "7", at = tomorrow).deleteAccount(1)
+            )
+
+            snapshot.assertAllBeforeNow()
+            assertTrue(snapshot.account(1).archived)
+            assertEquals(listOf(1L), snapshot.operations.map { it.uid })
+        }
+
+        @Test
+        fun `an assignment made while a future entry was live stays before now and before the final anchor`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "5", at = day(2)).expense(2, 1, "7", at = tomorrow)
+                    .assignBalance(1, "20").deleteOperation(2, moneyBack = true)
+            )
+
+            snapshot.assertAllBeforeNow()
+            val anchors = snapshot.anchorsOf(1).sortedBy { it.occurredAt }
+            assertEquals(listOf(money("20"), money("27")), anchors.map { it.value })
+        }
+
+        @Test
+        fun `every account's anchors stay ordered after a deleted future entry`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").account(2, "0").account(3, "0").income(1, 1, "5", at = day(2))
+                    .expense(2, 2, "7", at = tomorrow.plusYears(1)).deleteOperation(2, moneyBack = true)
+                    .assignBalance(2, "3").assignBalance(3, "4")
+            )
+
+            snapshot.assertAllBeforeNow()
+            for (account in snapshot.accounts) {
+                val instants = listOf(account.initialBalanceAt) + snapshot.anchorsOf(account.uid).map { it.occurredAt }.sorted()
+                assertTrue(instants.zipWithNext().all { (a, b) -> a < b })
+            }
+            assertEquals(listOf(money("5"), money("3"), money("4")), listOf(1L, 2L, 3L).map { snapshot.finalBalance(it) })
         }
     }
 

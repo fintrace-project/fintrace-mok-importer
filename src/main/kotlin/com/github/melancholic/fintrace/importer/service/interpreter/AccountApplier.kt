@@ -67,8 +67,6 @@ internal class AccountApplierImpl(
         }
     }
 
-    // Decision 7: the account's operations disappear with it, its transfer legs are orphaned for
-    // balance purposes but keep naming it, and it survives archived so those legs stay valid in Core.
     override fun deleteAccount(context: ChronicleSnapshotContext, event: DeletedAccount) {
         val account = if (context.skippedAccounts.remove(event.uid)) {
             null
@@ -117,7 +115,6 @@ internal class AccountApplierImpl(
         SnapshotAccount(it.id, it.uid, it.name, it.currency, it.initialBalance, it.initialBalanceAt!!, it.archived)
     }
 
-    // D2: 0 or absent is "unspecified" and takes the workspace's currency; an unknown code skips.
     private fun resolveCurrency(context: ChronicleSnapshotContext, code: Int?): String? =
         if (code == null || code == 0) {
             count(context, Code.SOURCE_ANOMALY, "unspecified currency, workspace default used")

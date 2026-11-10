@@ -2,7 +2,7 @@ package com.github.melancholic.fintrace.importer.domain
 
 import java.math.BigDecimal
 import java.time.LocalDateTime
-import java.util.UUID
+import java.util.*
 
 data class ChronicleSnapshot(
     val accounts: List<SnapshotAccount>,
@@ -33,25 +33,30 @@ data class SnapshotCategory(
     val parentId: UUID?,
 )
 
+sealed interface BusinessDated {
+    val uid: Long
+    val occurredAt: LocalDateTime
+}
+
 data class SnapshotOperation(
     val id: UUID,
-    val uid: Long,
-    val occurredAt: LocalDateTime,
+    override val uid: Long,
+    override val occurredAt: LocalDateTime,
     val amount: BigDecimal,
     val kind: CategoryType,
     val accountId: UUID,
     val categoryId: UUID?,
     val comment: String?,
-)
+) : BusinessDated
 
 data class SnapshotTransfer(
     val id: UUID,
-    val uid: Long,
-    val occurredAt: LocalDateTime,
+    override val uid: Long,
+    override val occurredAt: LocalDateTime,
     val source: SnapshotTransferLeg,
     val target: SnapshotTransferLeg,
     val comment: String?,
-)
+) : BusinessDated
 
 data class SnapshotTransferLeg(
     val accountId: UUID,

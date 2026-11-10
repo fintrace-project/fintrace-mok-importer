@@ -1,10 +1,10 @@
 package com.github.melancholic.fintrace.importer.service.interpreter
 
 import com.github.melancholic.fintrace.importer.domain.Diagnostic.Code
-import com.github.melancholic.fintrace.importer.domain.MokOperation
 import java.time.LocalDateTime
 
-internal class ChronicleSnapshotContext(val defaultCurrency: String, val now: LocalDateTime) {
+internal class ChronicleSnapshotContext(val defaultCurrency: String, importStartTime: LocalDateTime) {
+    val businessDateCap: LocalDateTime = importStartTime.minusSeconds(1)
     val accounts = LinkedHashMap<Long, AccountState>()
     val createdAccounts = ArrayList<AccountState>()
     val skippedAccounts = HashSet<Long>()
@@ -17,7 +17,6 @@ internal class ChronicleSnapshotContext(val defaultCurrency: String, val now: Lo
     val belowFloor = ArrayList<AnchorState>()
     var maxBusinessDate: LocalDateTime? = null
     var lastStamp: LocalDateTime? = null
-    var latestDated: MokOperation? = null
 
     val counts = LinkedHashMap<Pair<Code, String>, Long>()
 }

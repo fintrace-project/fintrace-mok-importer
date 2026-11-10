@@ -27,7 +27,7 @@ internal class TransferApplierImpl(
                 val transfer = TransferState(
                     id = ids.nextUUID(),
                     uid = event.uid,
-                    date = event.date ?: context.maxBusinessDate ?: context.now,
+                    date = event.date ?: context.maxBusinessDate ?: context.businessDateCap,
                     source = source,
                     target = target,
                     money = event.money,

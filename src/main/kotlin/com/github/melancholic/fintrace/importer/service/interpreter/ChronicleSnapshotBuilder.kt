@@ -11,29 +11,27 @@ import java.util.*
 internal class ChronicleSnapshotBuilder(
     private val applier: ChronicleBaseApplier,
     private val uuidGenerator: UUIDGenerator,
-    private val now: LocalDateTime,
+    private val importStartTime: LocalDateTime,
     defaultCurrency: String
 ) {
-    private val context = ChronicleSnapshotContext(defaultCurrency, now)
+    private val context = ChronicleSnapshotContext(defaultCurrency, importStartTime)
 
     fun run(chronicle: ParsedChronicle): ChronicleSnapshot {
-        val floor = chronicle.events
-            .mapNotNull { businessDateOf(it) }
-            .minOrNull()
-
         for (event in chronicle.events) {
-            businessDateOf(event)?.let { date ->
+            businessDateOf(event)?.let { minOf(it, context.businessDateCap) }?.let { date ->
                 if (context.maxBusinessDate == null || date > context.maxBusinessDate) {
                     context.maxBusinessDate = date
-                    context.latestDated = event
                 }
             }
             applier.apply(context, event)
         }
 
-        val floorOrNow = floor ?: now.minusNanos(EPSILON_NANOS * (context.createdAccounts.size + 2L))
-        stampBelowFloor(floorOrNow)
-        val finals = finalAnchors(floorOrNow)
+        val floor = chronicle.events
+            .mapNotNull { businessDateOf(it) }
+            .minOrNull()
+            ?.let { minOf(it, context.businessDateCap) } ?: context.businessDateCap
+        stampBelowFloor(floor)
+        val finals = finalAnchors(floor)
 
         val snapshot = ChronicleSnapshot(
             accounts = applier.accountApplier.emitAccounts(context),
@@ -59,11 +57,10 @@ internal class ChronicleSnapshotBuilder(
         is UpdateTransaction,
         is AddedNewTransfer,
         is UpdatedTransfer -> event.date
+
         else -> null
     }
 
-    // Decision 5: every opening anchor, then every balance assignment seen before the first dated
-    // event, in one block ending one epsilon below the earliest business date in the log.
     private fun stampBelowFloor(floor: LocalDateTime) {
         val block = context.createdAccounts.map { OpeningStamp(it) } + context.belowFloor.map { AssignmentStamp(it) }
         block.forEachIndexed { index, stamp ->
@@ -83,17 +80,15 @@ internal class ChronicleSnapshotBuilder(
         }
     }
 
-    // D5: Core refuses a future anchor, and inventing a date would hide a real oddity in the source.
     private fun checkNotInFuture(snapshot: ChronicleSnapshot) {
-        if (snapshot.anchors.any { it.occurredAt > now }) {
+        val future = (snapshot.operations + snapshot.transfers).firstOrNull { it.occurredAt > importStartTime }
+        if (future != null) {
             throw InvalidChronicleException(
-                "The chronicle runs into the future: event uid ${context.latestDated?.num} is dated ${context.maxBusinessDate}, after $now"
+                "The chronicle runs into the future: event uid ${future.uid} is dated ${future.occurredAt}, after $importStartTime"
             )
         }
     }
 
-    // Decision 4: violations are invisible in the figures — a balance off by one operation — so
-    // they stop the import rather than reach Core.
     private fun assertAnchorOrdering(snapshot: ChronicleSnapshot) {
         val anchorsByAccount = snapshot.anchors.groupBy { it.accountId }
         val eventInstants = HashMap<UUID, MutableSet<LocalDateTime>>()
@@ -106,12 +101,17 @@ internal class ChronicleSnapshotBuilder(
         for (account in snapshot.accounts) {
             val instants =
                 listOf(account.initialBalanceAt) + anchorsByAccount[account.id].orEmpty().map { it.occurredAt }
-            check(
-                instants.zipWithNext()
-                    .all { (a, b) -> a < b }) { "Anchors of account ${account.uid} are not strictly increasing" }
-            check(instants.all { it.nano % 1_000 == 0 }) { "An anchor of account ${account.uid} is not microsecond-aligned" }
+            check(instants.zipWithNext().all { (a, b) -> a < b }) {
+                "Anchors of account ${account.uid} are not strictly increasing"
+            }
+            check(instants.all { it.nano % 1_000 == 0 }) {
+                "An anchor of account ${account.uid} is not microsecond-aligned"
+            }
             check(instants.none { it in eventInstants[account.id].orEmpty() }) {
                 "An anchor of account ${account.uid} shares an instant with one of its operations"
+            }
+            check(instants.none { anchorDate -> anchorDate.isAfter(importStartTime) }) {
+                "An anchor of account ${account.uid} is dated after $importStartTime"
             }
         }
     }
