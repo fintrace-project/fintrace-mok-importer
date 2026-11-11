@@ -26,7 +26,7 @@ class ChronicleParserImpl(private val mapper: ObjectMapper) : ChronicleParser {
                 ?.let { CONSTRUCTORS[it] }
 
             if (constructor == null) {
-                skipped.compute(raw.type) { _, v ->  v?.let {v+1} ?: 1 }
+                skipped.compute(raw.type) { _, v -> v?.let { v + 1 } ?: 1 }
                 continue
             }
 
@@ -55,7 +55,8 @@ class ChronicleParserImpl(private val mapper: ObjectMapper) : ChronicleParser {
     }
 
     private fun construct(raw: RawMokOperation, constructor: (Long, JsonNode) -> MokOperation): MokOperation {
-        val params = raw.rawData ?: throw InvalidChronicleException("Chronicle row uid ${raw.num} (type ${raw.type}) has no params")
+        val params = raw.rawData
+            ?: throw InvalidChronicleException("Chronicle row uid ${raw.num} (type ${raw.type}) has no params")
         val json = try {
             mapper.readTree(params)
         } catch (e: JacksonException) {

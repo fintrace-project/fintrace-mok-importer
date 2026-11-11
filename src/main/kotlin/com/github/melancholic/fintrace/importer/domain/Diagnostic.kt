@@ -6,7 +6,15 @@ data class Diagnostic(
     val count: Long,
     val detail: String? = null,
 ) {
-    enum class Severity { WARNING, ERROR }
+    enum class Severity {
+        WARNING,
+        ERROR
+    }
 
-    enum class Code { UNSUPPORTED_RECORD, UNKNOWN_CURRENCY, UNRESOLVED_REFERENCE, SOURCE_ANOMALY }
+    enum class Code {
+        UNSUPPORTED_RECORD,
+        UNKNOWN_CURRENCY,
+        UNRESOLVED_REFERENCE,
+        SOURCE_ANOMALY
+    }
 }
