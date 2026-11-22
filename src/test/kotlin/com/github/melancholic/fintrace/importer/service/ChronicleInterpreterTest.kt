@@ -299,6 +299,33 @@ class ChronicleInterpreterTest {
         }
 
         @Test
+        fun `a deleted account's zero anchor sits at its deletion, not with the final anchors`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").account(2, "0")
+                    .transfer(1, from = 1, to = 2, money = "30", at = day(3))
+                    .deleteAccount(2)
+                    .income(1, 1, "5", at = day(20))
+            )
+
+            val zero = snapshot.anchorsOf(2).single()
+            assertEquals(money("0"), zero.value)
+            assertEquals(day(3).plusNanos(1_000), zero.occurredAt)
+            assertTrue(snapshot.anchorsOf(1).maxOf { it.occurredAt } > day(20))
+        }
+
+        @Test
+        fun `an account deleted before any dated event has its zero anchor below the floor, after its opening`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "10").deleteAccount(1).account(2, "0").income(1, 2, "5", at = day(5))
+            )
+
+            val zero = snapshot.anchorsOf(1).single()
+            assertEquals(money("0"), zero.value)
+            assertTrue(snapshot.account(1).initialBalanceAt < zero.occurredAt)
+            assertTrue(zero.occurredAt < day(5))
+        }
+
+        @Test
         fun `a uid reused after deletion is a new account`() {
             val snapshot = interpretChronicle(Log().account(1, "0").deleteAccount(1).account(1, "7"))
 

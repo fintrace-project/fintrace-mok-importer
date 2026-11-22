@@ -4,7 +4,6 @@ import com.github.melancholic.fintrace.importer.domain.*
 import com.github.melancholic.fintrace.importer.exception.InvalidChronicleException
 import com.github.melancholic.fintrace.importer.service.UUIDGenerator
 import com.github.melancholic.fintrace.importer.service.interpreter.AbstractApplier.Companion.EPSILON_NANOS
-import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.*
 
@@ -96,10 +95,12 @@ internal class ChronicleSnapshotBuilder(
 
     private fun finalAnchors(floor: LocalDateTime): List<AnchorState> {
         val base = listOfNotNull(context.maxBusinessDate, context.lastStamp, floor.minusNanos(EPSILON_NANOS)).max()
-        return context.createdAccounts.mapIndexed { index, account ->
-            AnchorState(account, if (account.archived) BigDecimal.ZERO.setScale(2) else account.balance)
-                .also { it.stamp = base.plusNanos(EPSILON_NANOS * (index + 1)) }
-        }
+        return context.createdAccounts
+            .filterNot { it.archived }
+            .mapIndexed { index, account ->
+                AnchorState(account, account.balance)
+                    .also { it.stamp = base.plusNanos(EPSILON_NANOS * (index + 1)) }
+            }
     }
 
     private fun gatedDrifts() = context.createdAccounts
