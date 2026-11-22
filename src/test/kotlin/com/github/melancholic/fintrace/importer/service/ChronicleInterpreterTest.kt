@@ -40,6 +40,8 @@ class ChronicleInterpreterTest {
     private fun ChronicleSnapshot.anchorsOf(uid: Long) = anchors.filter { it.accountId == account(uid).id }
     private fun ChronicleSnapshot.finalBalance(uid: Long) = anchorsOf(uid).maxBy { it.occurredAt }.value
     private fun ChronicleSnapshot.detail(detail: String) = diagnostics.singleOrNull { it.detail == detail }?.count
+    private fun gatedDetail(uid: Long, drift: String) =
+        "account 'Account $uid': balance-gated edits leave its final anchor $drift off its operations"
 
     @Nested
     inner class AccountsAndOperations {
@@ -96,6 +98,63 @@ class ChronicleInterpreterTest {
             assertEquals(money("-10"), updated(false).finalBalance(1))
             assertEquals(money("0"), updated(false).finalBalance(2))
             assertEquals(updated(false).account(2).id, updated(false).operations.single().accountId)
+        }
+
+        @Test
+        fun `balance-gated edits are reported per account with how far they leave the final anchor off`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").account(2, "0")
+                    .income(1, 1, "10.80").deleteOperation(1, moneyBack = false)
+                    .expense(2, 1, "10").updateMoney(2, "15", moneyBack = false)
+                    .income(3, 1, "40").moveOperation(3, to = 2, moneyBack2 = false)
+            )
+
+            assertEquals(3, snapshot.detail(gatedDetail(1, "+55.80")))
+            assertEquals(1, snapshot.detail(gatedDetail(2, "-40.00")))
+        }
+
+        @Test
+        fun `edits that respect their gates report nothing`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").account(2, "0")
+                    .income(1, 1, "10").deleteOperation(1, moneyBack = true)
+                    .expense(2, 1, "10").updateMoney(2, "15", moneyBack = true)
+                    .income(3, 1, "40").moveOperation(3, to = 2, moneyBack2 = true)
+            )
+
+            assertTrue(snapshot.diagnostics.isEmpty(), "diagnostics: ${snapshot.diagnostics}")
+        }
+
+        @Test
+        fun `a gated category deletion is reported`() {
+            val snapshot = interpretChronicle(
+                Log().category(7, "Rent", EXPENSE, group = 1).account(1, "0")
+                    .expense(1, 1, "10", category = 7).deleteCategory(7, moneyBack = false)
+            )
+
+            assertEquals(1, snapshot.detail(gatedDetail(1, "-10.00")))
+        }
+
+        @Test
+        fun `a balance assignment absorbs earlier drift, so only later edits are reported`() {
+            val absorbed = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "10").deleteOperation(1, moneyBack = false).assignBalance(1, "5")
+            )
+            val after = interpretChronicle(
+                Log().account(1, "0").assignBalance(1, "5").income(1, 1, "10").deleteOperation(1, moneyBack = false)
+            )
+
+            assertTrue(absorbed.diagnostics.isEmpty(), "diagnostics: ${absorbed.diagnostics}")
+            assertEquals(1, after.detail(gatedDetail(1, "+10.00")))
+        }
+
+        @Test
+        fun `drift on a deleted account is not reported`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "10").deleteOperation(1, moneyBack = false).deleteAccount(1)
+            )
+
+            assertTrue(snapshot.diagnostics.isEmpty(), "diagnostics: ${snapshot.diagnostics}")
         }
 
         @Test

@@ -2,12 +2,20 @@ package com.github.melancholic.fintrace.importer.service.interpreter
 
 import com.github.melancholic.fintrace.importer.domain.Diagnostic.Code
 import com.github.melancholic.fintrace.importer.util.sanitizeName
+import java.math.BigDecimal
 import java.util.*
 
 internal abstract class AbstractApplier {
 
     protected fun count(context: ChronicleSnapshotContext, code: Code, detail: String) {
         context.counts.merge(code to detail, 1L, Long::plus)
+    }
+
+    protected fun gatedEdit(account: AccountState, drift: BigDecimal) {
+        if (drift.signum() != 0) {
+            account.gatedEdits++
+            account.gatedDrift += drift
+        }
     }
 
     protected fun name(context: ChronicleSnapshotContext, raw: String, fallback: String): String {

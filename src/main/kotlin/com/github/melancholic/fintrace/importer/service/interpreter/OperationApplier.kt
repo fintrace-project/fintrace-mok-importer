@@ -51,8 +51,11 @@ internal class OperationApplierImpl(
         } else {
             event.date?.let { operation.date = it }
             event.money?.let { money ->
+                val change = operation.kind.signed(money - operation.money)
                 if (event.moneyBack == true) {
-                    operation.account.balance += operation.kind.signed(money - operation.money)
+                    operation.account.balance += change
+                } else {
+                    gatedEdit(operation.account, change.negate())
                 }
                 operation.money = money
             }
@@ -62,6 +65,9 @@ internal class OperationApplierImpl(
                     if (event.moneyBack2 == true) {
                         operation.account.balance -= operation.signed()
                         target.balance += operation.signed()
+                    } else if (target !== operation.account) {
+                        gatedEdit(operation.account, operation.signed())
+                        gatedEdit(target, operation.signed().negate())
                     }
                     operation.account = target
                     target.hasOperations = true
@@ -78,6 +84,8 @@ internal class OperationApplierImpl(
             count(context, Code.SOURCE_ANOMALY, "deletion of an unknown operation ignored")
         } else if (event.moneyBack == true) {
             operation.account.balance -= operation.signed()
+        } else {
+            gatedEdit(operation.account, operation.signed())
         }
     }
 

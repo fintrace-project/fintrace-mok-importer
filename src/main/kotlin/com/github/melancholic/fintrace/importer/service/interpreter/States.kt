@@ -16,6 +16,8 @@ internal class AccountState(
     var initialBalanceAt: LocalDateTime? = null
     var archived = false
     var hasOperations = false
+    var gatedEdits = 0L
+    var gatedDrift: BigDecimal = BigDecimal.ZERO
 }
 
 internal class OperationState(

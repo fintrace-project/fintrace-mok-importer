@@ -97,6 +97,8 @@ internal class AccountApplierImpl(
         val account = liveAccount(context, uid, "balance assignment")
         if (account != null) {
             account.balance = money
+            account.gatedEdits = 0
+            account.gatedDrift = BigDecimal.ZERO
             val anchor = AnchorState(account, money)
             val maxDate = context.maxBusinessDate
             if (maxDate == null) {

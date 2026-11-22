@@ -47,7 +47,11 @@ internal class CategoryApplierImpl(
             while (iterator.hasNext()) {
                 val operation = iterator.next()
                 if (operation.category == event.uid) {
-                    if (event.moneyBack == true) operation.account.balance -= operation.signed()
+                    if (event.moneyBack == true) {
+                        operation.account.balance -= operation.signed()
+                    } else {
+                        gatedEdit(operation.account, operation.signed())
+                    }
                     iterator.remove()
                 }
             }

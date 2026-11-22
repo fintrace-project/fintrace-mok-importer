@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Random
 
 /**
- * Writes an optimistic MOK chronicle — one that imports with zero diagnostics — and tracks every
+ * Writes an optimistic MOK chronicle — one whose only diagnostics are the balance-gate warnings — and tracks every
  * account's balance by the vendor's replay rules (`DDChronicleToDbConverter`) as it goes. The figures
  * check the pipeline, not our reading of the format: see docs/plans/M2-synthetic-dump.md.
  */
@@ -147,6 +147,7 @@ class SyntheticDumpGenerator(private val size: SyntheticDumpSize) {
     private fun assignBalance(account: Account) {
         val correction = if (random.nextBoolean()) BigDecimal.ZERO else cents(random.nextLong(-2000, 2000))
         account.balance = account.balance.add(correction)
+        account.drift = BigDecimal.ZERO
         emit(21, mapOf("uid" to account.uid, "money" to json(account.balance)))
     }
 
@@ -235,7 +236,8 @@ class SyntheticDumpGenerator(private val size: SyntheticDumpSize) {
     private fun updateOperationMoney(operation: Operation, gate: Int) {
         val account = accounts.getValue(operation.account)
         val money = generateSequence { amount(operation.kind, account.currency) }.first { it != operation.money }
-        if (gate == 1) account.balance = account.balance.add(operation.kind.signed(money.subtract(operation.money)))
+        val change = operation.kind.signed(money.subtract(operation.money))
+        if (gate == 1) account.balance = account.balance.add(change) else account.drift = account.drift.subtract(change)
         operation.money = money
         emit(11, mapOf("uid" to operation.uid, "money" to json(money), "moneyBack" to gate))
     }
@@ -245,6 +247,9 @@ class SyntheticDumpGenerator(private val size: SyntheticDumpSize) {
         if (gate == 1) {
             accounts.getValue(operation.account).apply { balance = balance.subtract(operation.kind.signed(operation.money)) }
             target.balance = target.balance.add(operation.kind.signed(operation.money))
+        } else {
+            accounts.getValue(operation.account).apply { drift = drift.add(operation.kind.signed(operation.money)) }
+            target.drift = target.drift.subtract(operation.kind.signed(operation.money))
         }
         operation.account = target.uid
         emit(11, mapOf("uid" to operation.uid, "accUid" to target.uid, "moneyBack2" to gate))
@@ -263,7 +268,10 @@ class SyntheticDumpGenerator(private val size: SyntheticDumpSize) {
     }
 
     private fun deleteOperation(operation: Operation, gate: Int) {
-        if (gate == 1) accounts.getValue(operation.account).apply { balance = balance.subtract(operation.kind.signed(operation.money)) }
+        accounts.getValue(operation.account).apply {
+            if (gate == 1) balance = balance.subtract(operation.kind.signed(operation.money))
+            else drift = drift.add(operation.kind.signed(operation.money))
+        }
         operations.remove(operation.uid)
         emit(12, mapOf("uid" to operation.uid, "moneyBack" to gate))
     }
@@ -386,7 +394,7 @@ class SyntheticDumpGenerator(private val size: SyntheticDumpSize) {
         categories = groups.size - 2 + categories.size,
         operations = operations.size,
         transfers = transfers.size,
-        diagnostics = 0,
+        diagnostics = createdAccounts.count { !it.archived && it.drift.signum() != 0 },
     )
 
     private enum class Kind(val code: Int, val root: Long) {
@@ -400,6 +408,7 @@ class SyntheticDumpGenerator(private val size: SyntheticDumpSize) {
 
     private class Account(val uid: Long, val name: String, val currency: Currency, var balance: BigDecimal) {
         var archived = false
+        var drift: BigDecimal = BigDecimal.ZERO
     }
 
     private class Group(val uid: Long, val kind: Kind, var name: String) {

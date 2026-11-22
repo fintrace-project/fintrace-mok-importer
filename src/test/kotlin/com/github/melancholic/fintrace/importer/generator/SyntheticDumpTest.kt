@@ -34,7 +34,7 @@ class SyntheticDumpTest(
     }
 
     @Test
-    fun `the committed S dump imports with no diagnostics and the generator's balances`(@TempDir directory: Path) {
+    fun `the committed S dump imports with only the balance-gate warnings and the generator's balances`(@TempDir directory: Path) {
         val file = SyntheticDump.buildSqlite(
             resource(SyntheticDump.sqlFileName(SyntheticDumpSize.S)),
             directory.resolve(SyntheticDump.mokFileName(SyntheticDumpSize.S)),
@@ -42,9 +42,13 @@ class SyntheticDumpTest(
 
         val snapshot = interpreter.interpretChronicle(parser.parse(loader.load(file)), NOW, "EUR")
 
-        assertTrue(snapshot.diagnostics.isEmpty(), "diagnostics: ${snapshot.diagnostics}")
-        assertNull(snapshot.renumbering)
         val expected = dump.expected
+        assertTrue(
+            snapshot.diagnostics.all { it.detail.orEmpty().contains("balance-gated edits") },
+            "diagnostics: ${snapshot.diagnostics}",
+        )
+        assertEquals(expected.diagnostics, snapshot.diagnostics.size, "diagnostics: ${snapshot.diagnostics}")
+        assertNull(snapshot.renumbering)
         assertEquals(expected.accounts.size, snapshot.accounts.size)
         assertEquals(expected.categories, snapshot.categories.size)
         assertEquals(expected.operations, snapshot.operations.size)

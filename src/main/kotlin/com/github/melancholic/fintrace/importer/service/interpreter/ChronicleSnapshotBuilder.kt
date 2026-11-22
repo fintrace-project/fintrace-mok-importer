@@ -43,7 +43,7 @@ internal class ChronicleSnapshotBuilder(
                 .sortedWith(compareBy({ it.occurredAt }, { it.accountId })),
             diagnostics = chronicle.diagnostics + context.counts.map { (key, count) ->
                 Diagnostic(Diagnostic.Severity.WARNING, key.first, count, key.second)
-            },
+            } + gatedDrifts(),
             renumbering = chronicle.renumbering,
         )
 
@@ -79,6 +79,18 @@ internal class ChronicleSnapshotBuilder(
                 .also { it.stamp = base.plusNanos(EPSILON_NANOS * (index + 1)) }
         }
     }
+
+    private fun gatedDrifts() = context.createdAccounts
+        .filter { !it.archived && it.gatedDrift.signum() != 0 }
+        .map {
+            val drift = it.gatedDrift.toPlainString().let { s -> if (it.gatedDrift.signum() > 0) "+$s" else s }
+            Diagnostic(
+                Diagnostic.Severity.WARNING,
+                Diagnostic.Code.SOURCE_ANOMALY,
+                it.gatedEdits,
+                "account '${it.name}': balance-gated edits leave its final anchor $drift off its operations",
+            )
+        }
 
     private fun checkNotInFuture(snapshot: ChronicleSnapshot) {
         val future = (snapshot.operations + snapshot.transfers).firstOrNull { it.occurredAt > importStartTime }
