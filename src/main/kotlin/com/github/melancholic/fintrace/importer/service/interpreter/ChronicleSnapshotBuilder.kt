@@ -30,7 +30,10 @@ internal class ChronicleSnapshotBuilder(
             .mapNotNull { businessDateOf(it) }
             .minOrNull()
             ?.let { minOf(it, context.businessDateCap) } ?: context.businessDateCap
+
         stampBelowFloor(floor)
+        updateInitTimeForAccounts(context)
+
         val finals = finalAnchors(floor)
 
         val snapshot = ChronicleSnapshot(
@@ -52,6 +55,22 @@ internal class ChronicleSnapshotBuilder(
         return snapshot
     }
 
+    private fun updateInitTimeForAccounts(context: ChronicleSnapshotContext) {
+        context.createdAccounts
+            .filter { it.createdAtMark != null }
+            .forEach { acc ->
+                val mark = requireNotNull(acc.createdAtMark)
+
+                val minOpDate = context.operations.values.filter { it.account === acc }
+                    .minOfOrNull { it.date } ?: mark
+                val minTransferDate = context.transfers.values
+                    .filter { (it.source === acc && !it.sourceOrphaned) || (it.target === acc && !it.targetOrphaned) }
+                    .minOfOrNull { it.date } ?: mark
+
+                acc.initialBalanceAt = minOf(minOf(minOpDate, minTransferDate), mark).minusNanos(EPSILON_NANOS)
+            }
+    }
+
     private fun businessDateOf(event: MokOperation): LocalDateTime? = when (event) {
         is AddNewTransaction,
         is UpdateTransaction,
@@ -62,7 +81,10 @@ internal class ChronicleSnapshotBuilder(
     }
 
     private fun stampBelowFloor(floor: LocalDateTime) {
-        val block = context.createdAccounts.map { OpeningStamp(it) } + context.belowFloor.map { AssignmentStamp(it) }
+        val block = context.createdAccounts
+            .filter { it.createdAtMark == null }
+            .map { OpeningStamp(it) } + context.belowFloor.map { AssignmentStamp(it) }
+
         block.forEachIndexed { index, stamp ->
             val at = floor.minusNanos(EPSILON_NANOS * (block.size - index))
             when (stamp) {

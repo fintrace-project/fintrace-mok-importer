@@ -165,11 +165,11 @@ class ChronicleInterpreterTest {
         }
 
         @Test
-        fun `a balance assignment from zero leaves the opening balance alone`() {
+        fun `an assignment before the first operation becomes the opening balance`() {
             val snapshot = interpretChronicle(Log().account(1, "0").assignBalance(1, "500"))
 
-            assertEquals(money("0"), snapshot.account(1).initialBalance)
-            assertEquals(money("500"), snapshot.finalBalance(1))
+            assertEquals(money("500"), snapshot.account(1).initialBalance)
+            assertEquals(money("500"), snapshot.anchorsOf(1).single().value)
         }
 
         @Test
@@ -589,7 +589,6 @@ class ChronicleInterpreterTest {
             val snapshot = interpretChronicle(Log().account(1, "0").income(1, 1, "5", at = day(10)).account(2, "0").income(2, 2, "5", at = day(3)))
 
             assertTrue(snapshot.accounts.all { it.initialBalanceAt < day(3) })
-            assertNotEquals(snapshot.account(1).initialBalanceAt, snapshot.account(2).initialBalanceAt)
         }
 
         @Test
@@ -605,13 +604,68 @@ class ChronicleInterpreterTest {
         }
 
         @Test
-        fun `an assignment before every dated event sits below the floor, after the opening anchor`() {
+        fun `an assignment before the first operation folds into an opening below the floor`() {
             val snapshot = interpretChronicle(Log().account(1, "0").assignBalance(1, "20").income(1, 1, "5", at = day(5)))
 
-            val assignment = snapshot.anchorsOf(1).single { it.value == money("20") }
-            assertTrue(snapshot.account(1).initialBalanceAt < assignment.occurredAt)
-            assertTrue(assignment.occurredAt < day(5))
-            assertEquals(money("25"), snapshot.finalBalance(1))
+            assertEquals(money("20"), snapshot.account(1).initialBalance)
+            assertTrue(snapshot.account(1).initialBalanceAt < day(5))
+            assertEquals(money("25"), snapshot.anchorsOf(1).single().value)
+        }
+
+        @Test
+        fun `an account created mid-log opens just before the high-water mark, not at the floor`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "5", at = day(2)).income(2, 1, "5", at = day(10)).account(2, "7")
+            )
+
+            assertTrue(snapshot.account(1).initialBalanceAt < day(2))
+            assertEquals(day(10).minusNanos(1_000), snapshot.account(2).initialBalanceAt)
+            assertEquals(money("7"), snapshot.account(2).initialBalance)
+        }
+
+        @Test
+        fun `a correction right after creation folds into an opening dated before a back-dated transfer`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "10000").income(1, 1, "5", at = day(20))
+                    .account(2, "5001").assignBalance(2, "0").transfer(1, 1, 2, "5001", at = day(5))
+            )
+
+            assertEquals(money("0"), snapshot.account(2).initialBalance)
+            assertEquals(day(5).minusNanos(1_000), snapshot.account(2).initialBalanceAt)
+            assertEquals(money("5001"), snapshot.anchorsOf(2).single().value)
+        }
+
+        @Test
+        fun `a first operation re-dated earlier pulls the opening before its new date`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "5", at = day(10))
+                    .account(2, "0").expense(2, 2, "1", at = day(12)).redate(2, day(4))
+            )
+
+            assertEquals(day(4).minusNanos(1_000), snapshot.account(2).initialBalanceAt)
+        }
+
+        @Test
+        fun `an assignment after an account's first transfer is a dated anchor, not the opening`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "10").account(2, "0").transfer(1, 1, 2, "4", at = day(5)).assignBalance(2, "9")
+            )
+
+            assertEquals(money("0"), snapshot.account(2).initialBalance)
+            val assignment = snapshot.anchorsOf(2).minBy { it.occurredAt }
+            assertEquals(money("9"), assignment.value)
+            assertTrue(assignment.occurredAt > day(5))
+        }
+
+        @Test
+        fun `a deleted account created mid-log is emitted archived with a dated opening`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "5", at = day(3))
+                    .account(2, "7").expense(2, 2, "1", at = day(8)).deleteAccount(2)
+            )
+
+            assertTrue(snapshot.account(2).archived)
+            assertEquals(day(3).minusNanos(1_000), snapshot.account(2).initialBalanceAt)
         }
 
         @Test

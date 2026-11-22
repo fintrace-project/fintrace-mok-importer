@@ -39,6 +39,7 @@ internal class AccountApplierImpl(
                     currency = currency,
                     balance = event.money,
                     initialBalance = event.money,
+                    createdAtMark = context.maxBusinessDate
                 )
                 context.accounts[event.uid] = account
                 context.createdAccounts.add(account)
@@ -53,7 +54,12 @@ internal class AccountApplierImpl(
             event.currency?.let { code ->
                 val currency = resolveCurrency(context, code)
                 when {
-                    currency == null -> count(context, Code.SOURCE_ANOMALY, "currency change to an unknown code ignored")
+                    currency == null -> count(
+                        context,
+                        Code.SOURCE_ANOMALY,
+                        "currency change to an unknown code ignored"
+                    )
+
                     currency != account.currency -> {
                         if (account.hasOperations) {
                             count(context, Code.SOURCE_ANOMALY, "currency changed on an account with operations")
@@ -94,11 +100,13 @@ internal class AccountApplierImpl(
     }
 
     override fun assignBalance(context: ChronicleSnapshotContext, uid: Long, money: BigDecimal) {
-        val account = liveAccount(context, uid, "balance assignment")
-        if (account != null) {
-            account.balance = money
-            account.gatedEdits = 0
-            account.gatedDrift = BigDecimal.ZERO
+        val account = liveAccount(context, uid, "balance assignment") ?: return
+
+        account.balance = money
+        account.gatedEdits = 0
+        account.gatedDrift = BigDecimal.ZERO
+
+        if (account.hasOperations) {
             val anchor = AnchorState(account, money)
             val maxDate = context.maxBusinessDate
             if (maxDate == null) {
@@ -110,6 +118,8 @@ internal class AccountApplierImpl(
                 context.lastStamp = anchor.stamp
             }
             context.anchors.add(anchor)
+        } else {
+            account.initialBalance = money
         }
     }
 

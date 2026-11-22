@@ -11,7 +11,8 @@ internal class AccountState(
     var name: String,
     var currency: String,
     var balance: BigDecimal,
-    val initialBalance: BigDecimal,
+    var initialBalance: BigDecimal,
+    var createdAtMark: LocalDateTime? = null
 ) {
     var initialBalanceAt: LocalDateTime? = null
     var archived = false
@@ -49,8 +50,14 @@ internal class TransferState(
     fun targetAmount(): BigDecimal = moneyTo?.takeIf { it.signum() >= 0 } ?: money
 
     fun apply() {
-        if (!sourceOrphaned) source.balance -= money
-        if (!targetOrphaned) target.balance += targetAmount()
+        if (!sourceOrphaned) {
+            source.balance -= money
+            source.hasOperations = true
+        }
+        if (!targetOrphaned) {
+            target.balance += targetAmount()
+            target.hasOperations = true
+        }
     }
 
     fun rollback() {
