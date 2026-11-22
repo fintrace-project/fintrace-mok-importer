@@ -18,7 +18,7 @@ internal class ChronicleSnapshotBuilder(
 
     fun run(chronicle: ParsedChronicle): ChronicleSnapshot {
         for (event in chronicle.events) {
-            businessDateOf(event)?.let { minOf(it, context.businessDateCap) }?.let { date ->
+            markDateOf(event)?.let { minOf(it, context.businessDateCap) }?.let { date ->
                 if (context.maxBusinessDate == null || date > context.maxBusinessDate) {
                     context.maxBusinessDate = date
                 }
@@ -120,6 +120,12 @@ internal class ChronicleSnapshotBuilder(
         return computed.mapValues { (account, sum) -> Balances(sum, account.balance - ahead.getValue(account)) }
     }
 
+    private fun markDateOf(event: MokOperation): LocalDateTime? = when (event) {
+        is AddNewTransaction,
+        is AddedNewTransfer -> event.date
+        else -> null
+    }
+
     private fun businessDateOf(event: MokOperation): LocalDateTime? = when (event) {
         is AddNewTransaction,
         is UpdateTransaction,
@@ -144,7 +150,9 @@ internal class ChronicleSnapshotBuilder(
     }
 
     private fun finalAnchors(floor: LocalDateTime): List<AnchorState> {
-        val base = listOfNotNull(context.maxBusinessDate, context.lastStamp, floor.minusNanos(EPSILON_NANOS)).max()
+        val entries = context.operations.values.map { it.date } + context.transfers.values.map { it.date }
+        val latestEntry = entries.maxOrNull()?.let { minOf(it, context.businessDateCap) }
+        val base = listOfNotNull(context.maxBusinessDate, context.lastStamp, latestEntry, floor.minusNanos(EPSILON_NANOS)).max()
         return context.createdAccounts
             .filterNot { it.archived }
             .mapIndexed { index, account ->

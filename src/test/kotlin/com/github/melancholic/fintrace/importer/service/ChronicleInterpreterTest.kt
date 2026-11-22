@@ -765,6 +765,20 @@ class ChronicleInterpreterTest {
         }
 
         @Test
+        fun `a forward re-date does not raise the mark, and the assignment after it leaves it out`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "0").income(1, 1, "100", at = day(1)).expense(2, 1, "10", at = day(2))
+                    .redate(2, day(29)).assignBalance(1, "90").income(3, 1, "5", at = day(3))
+            )
+
+            val (assignment, final) = snapshot.anchorsOf(1).sortedBy { it.occurredAt }
+            assertEquals(day(2).plusNanos(1_000), assignment.occurredAt)
+            assertEquals(money("100"), assignment.value)
+            assertEquals(money("95"), final.value)
+            assertTrue(final.occurredAt > day(29))
+        }
+
+        @Test
         fun `a log with no dated events at all still dates everything in the past`() {
             val snapshot = interpretChronicle(Log().account(1, "10").account(2, "0").assignBalance(1, "15"))
 
@@ -937,7 +951,7 @@ class ChronicleInterpreterTest {
 
             snapshot.assertAllBeforeNow()
             val anchors = snapshot.anchorsOf(1).sortedBy { it.occurredAt }
-            assertEquals(listOf(money("20"), money("27")), anchors.map { it.value })
+            assertEquals(listOf(money("27"), money("27")), anchors.map { it.value })
         }
 
         @Test

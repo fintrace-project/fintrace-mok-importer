@@ -2,6 +2,7 @@ package com.github.melancholic.fintrace.importer.service.interpreter
 
 import com.github.melancholic.fintrace.importer.domain.Diagnostic.Code
 import com.github.melancholic.fintrace.importer.service.interpreter.AbstractApplier.Companion.EPSILON_NANOS
+import java.math.BigDecimal
 import java.time.LocalDateTime
 
 internal class ChronicleSnapshotContext(val defaultCurrency: String, importStartTime: LocalDateTime) {
@@ -21,6 +22,21 @@ internal class ChronicleSnapshotContext(val defaultCurrency: String, importStart
     var lastStamp: LocalDateTime? = null
 
     val counts = LinkedHashMap<Pair<Code, String>, Long>()
+
+    fun aheadOfMark(account: AccountState): BigDecimal {
+        val mark = maxBusinessDate ?: return BigDecimal.ZERO
+        var sum = BigDecimal.ZERO
+        operations.values
+            .filter { it.account === account && it.date > mark }
+            .forEach { sum += it.signed() }
+        transfers.values
+            .filter { it.date > mark }
+            .forEach {
+                if (!it.sourceOrphaned && it.source === account) sum -= it.money
+                if (!it.targetOrphaned && it.target === account) sum += it.targetAmount()
+            }
+        return sum
+    }
 
     fun addAnchorAtMark(anchor: AnchorState) {
         val maxDate = maxBusinessDate

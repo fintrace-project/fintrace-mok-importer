@@ -110,7 +110,7 @@ internal class AccountApplierImpl(
         account.gatedDrift = BigDecimal.ZERO
 
         if (account.hasOperations) {
-            context.addAnchorAtMark(AnchorState(account, money))
+            context.addAnchorAtMark(AnchorState(account, money - context.aheadOfMark(account)))
         } else {
             account.initialBalance = money
         }
