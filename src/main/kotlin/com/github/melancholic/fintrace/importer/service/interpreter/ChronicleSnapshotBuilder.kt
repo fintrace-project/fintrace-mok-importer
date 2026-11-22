@@ -4,6 +4,7 @@ import com.github.melancholic.fintrace.importer.domain.*
 import com.github.melancholic.fintrace.importer.exception.InvalidChronicleException
 import com.github.melancholic.fintrace.importer.service.UUIDGenerator
 import com.github.melancholic.fintrace.importer.service.interpreter.AbstractApplier.Companion.EPSILON_NANOS
+import java.math.BigDecimal
 import java.time.LocalDateTime
 import java.util.*
 
@@ -22,7 +23,9 @@ internal class ChronicleSnapshotBuilder(
                     context.maxBusinessDate = date
                 }
             }
+            val before = if (isEdit(event)) balances() else null
             applier.apply(context, event)
+            before?.let { anchorLostEdits(it) }
         }
 
         val floor = chronicle.events
@@ -70,6 +73,53 @@ internal class ChronicleSnapshotBuilder(
             }
     }
 
+    private fun isEdit(event: MokOperation) = event is UpdateTransaction || event is DeleteTransaction ||
+            event is DeletedCategory || event is UpdatedTransfer || event is DeletedTransfer
+
+    // An edit moves the tracked balance by one amount and the computed one by another when it touches an entry
+    // behind the latest anchor, or is gated; the anchor carries only that edit's own difference.
+    private fun anchorLostEdits(before: Map<AccountState, Balances>) {
+        balances().forEach { (account, after) ->
+            val prior = before[account] ?: return@forEach
+            val lost = (after.tracked - prior.tracked) - (after.computed - prior.computed)
+            if (lost.signum() != 0) context.addAnchorAtMark(AnchorState(account, after.computed + lost))
+        }
+    }
+
+    private class Balances(val computed: BigDecimal, val tracked: BigDecimal)
+
+    // Entries dated past the mark (a live future entry) would follow any new anchor, so they stay out of both.
+    private fun balances(): Map<AccountState, Balances> {
+        val mark = context.maxBusinessDate
+        val computed = HashMap<AccountState, BigDecimal>()
+        val ahead = HashMap<AccountState, BigDecimal>()
+        context.accounts.values
+            .forEach {
+                computed[it] = context.latestAnchors[it]?.value ?: it.initialBalance
+                ahead[it] = BigDecimal.ZERO
+            }
+
+        fun include(account: AccountState, date: LocalDateTime, amount: BigDecimal) {
+            val sum = computed[account] ?: return
+            val anchoredAt = context.latestAnchors[account]?.stamp
+            when {
+                mark != null && date > mark -> ahead[account] = ahead.getValue(account) + amount
+                anchoredAt == null || date > anchoredAt -> computed[account] = sum + amount
+            }
+        }
+
+        context.operations.values
+            .forEach { include(it.account, it.date, it.signed()) }
+
+        context.transfers.values
+            .forEach {
+                if (!it.sourceOrphaned) include(it.source, it.date, it.money.negate())
+                if (!it.targetOrphaned) include(it.target, it.date, it.targetAmount())
+            }
+
+        return computed.mapValues { (account, sum) -> Balances(sum, account.balance - ahead.getValue(account)) }
+    }
+
     private fun businessDateOf(event: MokOperation): LocalDateTime? = when (event) {
         is AddNewTransaction,
         is UpdateTransaction,
@@ -111,7 +161,7 @@ internal class ChronicleSnapshotBuilder(
                 Diagnostic.Severity.WARNING,
                 Diagnostic.Code.SOURCE_ANOMALY,
                 it.gatedEdits,
-                "account '${it.name}': balance-gated edits leave its final anchor $drift off its operations",
+                "account '${it.name}': balance-gated edits leave its operations $drift off its balance",
             )
         }
 

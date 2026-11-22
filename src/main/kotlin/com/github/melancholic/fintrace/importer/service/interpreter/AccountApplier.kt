@@ -98,9 +98,7 @@ internal class AccountApplierImpl(
             account.archived = true
 
             // Create explicitly a zero anchor for removed account
-            val anchor = AnchorState(account, BigDecimal.ZERO.setScale(2))
-            stampAtMark(context, anchor)
-            context.anchors.add(anchor)
+            context.addAnchorAtMark(AnchorState(account, BigDecimal.ZERO.setScale(2)))
         }
     }
 
@@ -112,9 +110,7 @@ internal class AccountApplierImpl(
         account.gatedDrift = BigDecimal.ZERO
 
         if (account.hasOperations) {
-            val anchor = AnchorState(account, money)
-            stampAtMark(context, anchor)
-            context.anchors.add(anchor)
+            context.addAnchorAtMark(AnchorState(account, money))
         } else {
             account.initialBalance = money
         }
@@ -131,19 +127,4 @@ internal class AccountApplierImpl(
         } else {
             CURRENCIES_BY_NUMERIC_CODE[code]
         }
-
-    private fun stampAtMark(
-        context: ChronicleSnapshotContext,
-        anchor: AnchorState
-    ) {
-        val maxDate = context.maxBusinessDate
-        if (maxDate == null) {
-            context.belowFloor.add(anchor)
-        } else {
-            val previous = context.lastStamp
-            anchor.stamp = if (previous != null && previous >= maxDate) previous.plusNanos(EPSILON_NANOS)
-            else maxDate.plusNanos(EPSILON_NANOS)
-            context.lastStamp = anchor.stamp
-        }
-    }
 }

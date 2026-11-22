@@ -41,7 +41,7 @@ class ChronicleInterpreterTest {
     private fun ChronicleSnapshot.finalBalance(uid: Long) = anchorsOf(uid).maxBy { it.occurredAt }.value
     private fun ChronicleSnapshot.detail(detail: String) = diagnostics.singleOrNull { it.detail == detail }?.count
     private fun gatedDetail(uid: Long, drift: String) =
-        "account 'Account $uid': balance-gated edits leave its final anchor $drift off its operations"
+        "account 'Account $uid': balance-gated edits leave its operations $drift off its balance"
 
     @Nested
     inner class AccountsAndOperations {
@@ -282,6 +282,75 @@ class ChronicleInterpreterTest {
 
             assertTrue(snapshot.accounts.isEmpty())
             assertEquals(1L, snapshot.detail("account update names an unknown account"))
+        }
+    }
+
+    @Nested
+    inner class AnchorsWhereBalancesDiverge {
+
+        private fun ChronicleSnapshot.anchorValues(uid: Long) = anchorsOf(uid).sortedBy { it.occurredAt }.map { it.value }
+
+        @Test
+        fun `an amount edit behind an anchor is followed by an anchor carrying the tracked balance`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").expense(1, 1, "20", at = day(1)).assignBalance(1, "75")
+                    .expense(2, 1, "10", at = day(5)).updateMoney(1, "15", moneyBack = true)
+            )
+
+            assertEquals(listOf(money("75"), money("70"), money("70")), snapshot.anchorValues(1))
+            assertEquals(day(5).plusNanos(1_000), snapshot.anchorsOf(1).sortedBy { it.occurredAt }[1].occurredAt)
+        }
+
+        @Test
+        fun `a deletion behind an anchor is followed by an anchor`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").expense(1, 1, "10", at = day(1)).assignBalance(1, "90")
+                    .income(2, 1, "1", at = day(5)).deleteOperation(1, moneyBack = true)
+            )
+
+            assertEquals(listOf(money("90"), money("101"), money("101")), snapshot.anchorValues(1))
+        }
+
+        @Test
+        fun `a move behind an anchor is followed by an anchor only where the balances part`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").account(2, "0").expense(1, 1, "10", at = day(1)).assignBalance(1, "90")
+                    .income(2, 2, "1", at = day(5)).moveOperation(1, to = 2, moneyBack2 = true)
+            )
+
+            assertEquals(listOf(money("90"), money("100"), money("100")), snapshot.anchorValues(1))
+            assertEquals(listOf(money("-9")), snapshot.anchorValues(2))
+        }
+
+        @Test
+        fun `a gated edit is followed by an anchor rather than left to the final one`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").expense(1, 1, "10", at = day(10)).updateMoney(1, "4", moneyBack = false)
+            )
+
+            assertEquals(listOf(money("90"), money("90")), snapshot.anchorValues(1))
+            assertEquals(day(10).plusNanos(1_000), snapshot.anchorsOf(1).minOf { it.occurredAt })
+        }
+
+        @Test
+        fun `an edit's anchor carries only its own change, a creation behind the anchor staying absorbed`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").expense(1, 1, "10", at = day(1)).assignBalance(1, "90")
+                    .expense(2, 1, "5", at = day(1).minusHours(1)).expense(3, 1, "1", at = day(5))
+                    .updateMoney(1, "8", moneyBack = true)
+            )
+
+            assertEquals(listOf(money("90"), money("91"), money("86")), snapshot.anchorValues(1))
+        }
+
+        @Test
+        fun `entries dated after the latest anchor add no anchor`() {
+            val snapshot = interpretChronicle(
+                Log().account(1, "100").expense(1, 1, "10", at = day(1)).assignBalance(1, "85")
+                    .expense(2, 1, "5", at = day(5)).updateMoney(2, "6", moneyBack = true).redate(2, day(6))
+            )
+
+            assertEquals(listOf(money("85"), money("79")), snapshot.anchorValues(1))
         }
     }
 
